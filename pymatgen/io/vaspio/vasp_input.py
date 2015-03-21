@@ -507,7 +507,7 @@ class Incar(dict, PMGSONable):
             if isinstance(val, six.string_types) else val)
 
     def as_dict(self):
-        d = {k: v for k, v in self.items()}
+        d = dict(self)
         d["@module"] = self.__class__.__module__
         d["@class"] = self.__class__.__name__
         return d
@@ -1539,6 +1539,10 @@ class Potcar(list, PMGSONable):
         Get the atomic symbols of all the atoms in the POTCAR file.
         """
         return [p.symbol for p in self]
+
+    @symbols.setter
+    def symbols(self, symbols):
+        self.set_symbols(symbols, functional=self.functional)
 
     @property
     def spec(self):
