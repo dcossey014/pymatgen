@@ -1431,16 +1431,13 @@ class PotcarSingle(object):
         hash_str = ""
         for k, v in self.PSCTR.items():
             hash_str += "{}".format(k)
-
             if isinstance(v, int):
                 hash_str += "{}".format(v)
             elif isinstance(v, float):
                 hash_str += "{:.3f}".format(v)
-            elif isinstance(v, str):
-                hash_str += "{}".format(v.replace(" ", ""))
             elif isinstance(v, bool):
                 hash_str += "{}".format(bool)
-            elif isinstance(v, tuple):
+            elif isinstance(v, (tuple, list)):
                 for item in v:
                     if isinstance(item, float):
                         hash_str += "{:.3f}".format(item)
@@ -1452,6 +1449,8 @@ class PotcarSingle(object):
                                 hash_str += "{:.3f}".format(item_v)
                             else:
                                 hash_str += "{}".format(item_v) if item_v else ""
+            else:
+                hash_str += v.replace(" ", "")
 
         self.hash_str = hash_str
         return md5(hash_str.lower().encode('utf-8')).hexdigest()
