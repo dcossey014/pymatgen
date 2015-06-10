@@ -39,9 +39,10 @@ class NEBAnalysis(object):
 
     def __init__(self, outcars, structures):
         """
-        Initializes a CINEBAnalysis from Outcar and Structure objects. Use
-        the static constructors if you prefer to have these automatically
-        generated from a directory of NEB calculations.
+        Initializes an NEBAnalysis from Outcar and Structure objects. Use
+        the static constructors, e.g., :class:`from_dir` instead if you
+        prefer to have these automatically generated from a directory of NEB
+        calculations.
 
         Args:
             outcars ([Outcar]): List of Outcar objects. Note that these have
@@ -52,14 +53,17 @@ class NEBAnalysis(object):
         if len(outcars) != len(structures):
             raise ValueError("# of Outcars must be same as # of Structures")
 
-        # Calculate cumulative mean square distance between structures,
-        # which serves as the reaction coordinate.
+        # Calculate cumulative root mean square distance between structures,
+        # which serves as the reaction coordinate. Note that these are
+        # calculated from the final relaxed structures as the coordinates may
+        # have changed from the initial interpolation.
         r = [0]
         prev = structures[0]
         for st in structures[1:]:
             dists = np.array([s2.distance(s1) for s1, s2 in zip(prev, st)])
-            r.append(np.sqrt(np.sum(dists ** 2)) + r[-1])
+            r.append(np.sqrt(np.sum(dists ** 2)))
             prev = st
+        r = np.cumsum(r)
 
         energies = []
         forces = []
@@ -158,14 +162,15 @@ class NEBAnalysis(object):
         plt.plot(self.r * scale, self.energies * 1000, 'ro', markersize=10)
         plt.xlabel("Reaction coordinate")
         plt.ylabel("Energy (meV)")
-        plt.ylim((np.min(all_y) - 10, np.max(all_y) + 10))
+        plt.ylim((np.min(all_y) - 10, np.max(all_y) * 1.02 + 20))
         if label_barrier:
             data = zip(all_x, all_y)
             barrier = max(data, key=lambda d: d[1])
             plt.plot([0, barrier[0]], [barrier[1], barrier[1]], 'k--')
             plt.annotate('%.0f meV' % barrier[1],
-                         xy=(barrier[0] / 2, barrier[1] + 1),
-                         xytext=(barrier[0] / 2, barrier[1] + 1))
+                         xy=(barrier[0] / 2, barrier[1] * 1.02),
+                         xytext=(barrier[0] / 2, barrier[1] * 1.02))
+        plt.tight_layout()
         return plt
 
     @classmethod
