@@ -10,11 +10,9 @@ be available on `PyPI <http://pypi.python.org>`_.
    not. If you do not need those features, you can choose to work with Python 3.
 2. numpy: For array, matrix and other numerical manipulations. Used extensively
    by all core modules.
-3. scipy 0.10+ (highly recommended): For use in Gaussian smearing and faster
-   Phase Diagrams.
-4. pyhull 1.5.2+: For generation of phase diagrams.
-5. requests 2.0+: For the high-level interface to the Materials API.
-6. monty 0.4.2+: For some common complementary functions,
+3. pyhull 1.5.2+: For generation of phase diagrams.
+4. requests 2.0+: For the high-level interface to the Materials API.
+5. monty 0.4.2+: For some common complementary functions,
    design patterns (e.g., singleton) and decorators to the Python
    standard library.
 
@@ -23,19 +21,21 @@ Optional dependencies
 
 Optional libraries that are required if you need certain features:
 
-1. matplotlib 1.1+ (highly recommended): For plotting (e.g., Phase Diagrams).
-2. VTK with Python bindings 5.8+ (http://www.vtk.org/): For visualization of
+1. scipy 0.10+ (highly recommended): For use in Gaussian smearing and faster
+   Phase Diagrams.
+2. matplotlib 1.1+ (highly recommended): For plotting (e.g., Phase Diagrams).
+3. VTK with Python bindings 5.8+ (http://www.vtk.org/): For visualization of
    crystal structures using the pymatgen.vis package. Note that the VTK
    package is incompatible with Python 3.x at the moment.
-3. Atomistic Simulation Environment or ASE 3.6+: Required for the usage of the
+4. Atomistic Simulation Environment or ASE 3.6+: Required for the usage of the
    adapters in pymatgen.io.aseio between pymatgen's core Structure object and
    the Atoms object used by ASE. Get it at https://wiki.fysik.dtu.dk/ase/.
    Note that the ASE package is incompatible with Python 3.x at the moment.
-4. OpenBabel with Python bindings (http://openbabel.org): Required for the
+5. OpenBabel with Python bindings (http://openbabel.org): Required for the
    usage of the adapters in pymatgen.io.babelio between pymatgen's Molecule
    and OpenBabel's OBMol. Opens up input and output support for the very large
    number of input and output formats supported by OpenBabel.
-5. nose - For unittesting. Not optional for developers.
+6. nose - For unittesting. Not optional for developers.
 
 Optional non-Python programs
 ----------------------------
@@ -244,15 +244,6 @@ Please feel free to send in suggestions to update the instructions based on
 your experiences. In all the instructions, it is assumed that you have standard
 gcc and other compilers (e.g., Xcode on Macs) already installed.
 
-Scipy (tested on v0.10.1)
--------------------------
-
-Mac OS X 10.7 - 10.8
-~~~~~~~~~~~~~~~~~~~~
-
-Typical installation of Xcode with python setup.py install seems to work fine.
-The pre-compiled binary for OSX 10.6 also seems to work.
-
 VTK (tested on v5.10.0 - 6.1.0)
 -------------------------------
 
@@ -267,17 +258,45 @@ Type the following::
 	cd VTK (this is the directory you expanded VTK into)
 	mkdir build
 	cd build
-	sudo ccmake .. (this uses cmake in an interactive manner)
+	ccmake .. (this uses cmake in an interactive manner)
 
-Press "t" to toggle advanced mode. Then press "c" to do an initial configuration. After the list of parameters come out,
-ensure that the PYTHON_VERSION is set to 2, the VTK_WRAP_PYTHON is set to ON, and BUILD_SHARED_LIBS is set to ON. Then
-press "c" again to configure and finally "g" to generate the required make files::
+Press "t" to toggle advanced mode. Then press "c" to do an initial
+configuration. After the list of parameters come out, ensure that the
+PYTHON_VERSION is set to 2, the VTK_WRAP_PYTHON is set to ON, and
+BUILD_SHARED_LIBS is set to ON. You may also need to modify the python
+paths and library paths if they are in non-standard locations. For example, if
+you have installed the official version of Python instead of using the
+Mac-provided version, you will probably need to edit the CMakeCache Python
+links. Example configuration for Python 2.7 is given below (only variables that
+need to be modified are shown):
 
-    BUILD_SHARED_LIBS                ON       # May need to toggle advanced mode to view this option
-    VTK_PYTHON_VERSION               2
-    VTK_WRAP_PYTHON                  ON
+::
 
-Next, do make and install::
+   //Path to a program.
+   PYTHON_EXECUTABLE:FILEPATH=/Library/Frameworks/Python.framework/Versions/2.7/bin/python
+
+   //Path to a file.
+   PYTHON_INCLUDE_DIR:PATH=/Library/Frameworks/Python.framework/Versions/2.7/Headers
+
+   //Path to a library.
+   PYTHON_LIBRARY:FILEPATH=/Library/Frameworks/Python.framework/Versions/2.7/lib/libpython2.7.dylib
+
+   //Also delete the prefix settings for python, which typically links to the Mac python.
+
+    VTK_INSTALL_PYTHON_MODULE_DIR:PATH=/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages
+
+.. note:: Garbage collection on new Xcode
+
+    If you are using a very new XCode (e.g. 5.1), please note that Cocoa garbage
+    collection has been removed and during compile, you may get an "error:
+    garbage collection is no longer supported" message. VTK does not require
+    Cocoa garbage collection, but was configured to built with support for it on.
+    You can simply remove the -fobjc-gc flag from VTK_REQUIRED_OBJCXX_FLAGS.
+
+Then press "c" again to configure and finally "g" to generate the required
+make files After the CMakeCache.txt file is generated, type:
+
+::
 
 	make -j 4
 	sudo make install
@@ -349,7 +368,8 @@ Here are the steps that I took to make it work:
         //Path to a library.
         PYTHON_LIBRARY:FILEPATH=/Library/Frameworks/Python.framework/Versions/2.7/lib/libpython2.7.dylib
 
-12. If you are using Mavericks (OSX 10.9) and encounter errors relating to <tr1/memory>, you might also need to include the following flag in your CMakeCache.txt::
+12. If you are using Mavericks (OSX 10.9) and encounter errors relating to <tr1/memory>, you might also need to include
+    the following flag in your CMakeCache.txt::
 
 		CMAKE_CXX_FLAGS:STRING=-stdlib=libstdc++
 
