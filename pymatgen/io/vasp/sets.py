@@ -1444,14 +1444,18 @@ class MVLElasticInputSet(DictVaspInputSet):
         “Elastic Properties of Alkali Superionic Conductor Electrolytes
         from First Principles Calculations”, accepted.
 
+    To read the elastic constants, you may use the Outcar class which parses the
+    elastic constants.
+
     Args:
         user_incar_settings (dict): A dict specifying additional incar
-            settings
+            settings. The key parameter is POTIM. The default of 0.015 is
+            usually fine, but some structures may require a smaller step.
     """
 
     def __init__(self, user_incar_settings=None):
         super(MVLElasticInputSet, self).__init__(
-            "Materials Virtual Lab Eastic Constant Calculation",
+            "Materials Virtual Lab Elastic Constant Calculation",
             loadfn(os.path.join(MODULE_DIR, "MPVaspInputSet.yaml")))
         self.user_incar_settings = user_incar_settings or {}
         self.incar_settings.update(self.user_incar_settings)
