@@ -20,8 +20,10 @@ __date__ = "4/4/14"
 import os
 from itertools import product
 from fractions import Fraction
+from abc import ABCMeta, abstractproperty
+from collections import Sequence
 import numpy as np
-
+import warnings
 from monty.serialization import loadfn
 
 from pymatgen.core.operations import SymmOp
@@ -39,13 +41,35 @@ FULL_SPACE_GROUP_MAPPING = {
     v["full_symbol"]: k for k, v in SYMM_DATA["space_group_encoding"].items()}
 
 
-class SymmetryGroup(object):
+class SymmetryGroup(Sequence):
+    __metaclass__ = ABCMeta
+
+    @abstractproperty
+    def symmetry_ops(self):
+        pass
+
+    def __contains__(self, item):
+        for i in self.symmetry_ops:
+            if np.allclose(i.affine_matrix, item.affine_matrix):
+                return True
+        return False
+
+    def __hash__(self):
+        return self.__len__()
+
+    def __getitem__(self, item):
+        return self.symmetry_ops[item]
+
+    def __len__(self):
+        return len(self.symmetry_ops)
 
     def is_subgroup(self, group):
+        warnings.warn("This is not fully functional. Only trivial subsets are tested right now. ")
         return set(self.symmetry_ops).issubset(group.symmetry_ops)
 
     def is_supergroup(self, group):
-        return set(self.symmetry_ops).issuperset(group.symmetry_ops)
+        warnings.warn("This is not fully functional. Only trivial subsets are tested right now. ")
+        return set(group.symmetry_ops).issubset(self.symmetry_ops)
 
 
 @cached_class
@@ -77,9 +101,13 @@ class PointGroup(SymmetryGroup):
         self.symbol = int_symbol
         self.generators = [GENERATOR_MATRICES[c]
                            for c in POINT_GROUP_ENC[int_symbol]]
-        self.symmetry_ops = set([SymmOp.from_rotation_and_translation(m)
-                                 for m in self._generate_full_symmetry_ops()])
-        self.order = len(self.symmetry_ops)
+        self._symmetry_ops = set([SymmOp.from_rotation_and_translation(m)
+                                  for m in self._generate_full_symmetry_ops()])
+        self.order = len(self._symmetry_ops)
+
+    @property
+    def symmetry_ops(self):
+        return self._symmetry_ops
 
     def _generate_full_symmetry_ops(self):
         symm_ops = list(self.generators)
