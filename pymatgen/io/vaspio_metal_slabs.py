@@ -7,7 +7,7 @@ __email__ = "vivid0036@gmail.com"
 __date__ = "6/2/15"
 
 
-from pymatgen.io.vaspio_set import MPVaspInputSet, DictVaspInputSet
+from pymatgen.io.vasp.sets import MPVaspInputSet, DictVaspInputSet
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.matproj.rest import MPRester
@@ -92,7 +92,8 @@ class MPSlabVaspInputSet(DictVaspInputSet):
     def get_incar(self, structure):
         abc = structure.lattice.abc
         kpt_calc = [int(self.k_product/abc[0]+0.5),
-                    int(self.k_product/abc[1]+0.5), int(self.k_product/abc[1]+0.5)]
+                    int(self.k_product/abc[1]+0.5),
+                    int(self.k_product/abc[1]+0.5)]
 
         if self.kpoints0:
             kpts = self.kpoints0
@@ -139,9 +140,9 @@ class MPSlabVaspInputSet(DictVaspInputSet):
             dict of {filename: file_as_string}, e.g., {'INCAR':'EDIFF=1e-4...'}
         """
         data = {'INCAR': self.get_incar(structure),
-             'KPOINTS': self.get_kpoints(structure),
-             'POSCAR': self.get_poscar(structure),
-             'POTCAR': self.get_potcar(structure)}
+                'KPOINTS': self.get_kpoints(structure),
+                'POSCAR': self.get_poscar(structure),
+                'POTCAR': self.get_potcar(structure)}
         return data
 
 

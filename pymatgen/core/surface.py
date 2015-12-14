@@ -74,7 +74,8 @@ class Slab(Structure):
                  oriented_unit_cell, shift, scale_factor,
                  validate_proximity=False, to_unit_cell=False,
                  coords_are_cartesian=False, site_properties=None,
-                 energy=None, energy_per_atom=None):
+                 energy=None, entry=None,
+                 pretty_formula=None, coh_energy=None,):
         """
         Makes a Slab structure, a structure object with additional information
         and methods pertaining to slabs.
@@ -122,7 +123,9 @@ class Slab(Structure):
         self.shift = shift
         self.scale_factor = scale_factor
         self.energy = energy
-        self.energy_per_atom = energy_per_atom
+        self.entry = entry
+        self.pretty_formula = pretty_formula
+        self.coh_energy = coh_energy
         super(Slab, self).__init__(
             lattice, species, coords, validate_proximity=validate_proximity,
             to_unit_cell=to_unit_cell,
