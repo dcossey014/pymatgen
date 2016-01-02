@@ -34,12 +34,12 @@ from monty.io import zopen
 from monty.os.path import zpath
 from monty.json import MontyDecoder
 
+from enum import Enum
 from tabulate import tabulate
 
 import scipy.constants as const
 
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.design_patterns import Enum
 from pymatgen.core.structure import Structure
 from pymatgen.core.periodic_table import Element, get_el_sp
 from monty.design_patterns import cached_class
@@ -763,12 +763,22 @@ class Incar(dict, MSONable):
         return Incar(params)
 
 
+
 class Kpoints(MSONable):
     """
     KPOINT reader/writer.
     """
-    supported_modes = Enum(("Gamma", "Monkhorst", "Automatic", "Line_mode",
-                            "Cartesian", "Reciprocal"))
+
+    class supported_modes(Enum):
+        Automatic = "Automatic"
+        Gamma = "Gamma"
+        Monkhorst = "Monkhorst"
+        Line_mode = "Line_mode"
+        Cartesian = "Cartesian"
+        Reciprocal = "Reciprocal"
+
+        def __str__(self):
+            return self.value
 
     def __init__(self, comment="Default gamma", num_kpts=0,
                  style=supported_modes.Gamma,
@@ -1068,14 +1078,14 @@ class Kpoints(MSONable):
         num_kpts = int(lines[1].split()[0].strip())
         style = lines[2].lower()[0]
 
-        #Fully automatic KPOINTS
+        # Fully automatic KPOINTS
         if style == "a":
             return Kpoints.automatic(int(lines[3]))
 
         coord_pattern = re.compile("^\s*([\d+\.\-Ee]+)\s+([\d+\.\-Ee]+)\s+"
                                    "([\d+\.\-Ee]+)")
 
-        #Automatic gamma and Monk KPOINTS, with optional shift
+        # Automatic gamma and Monk KPOINTS, with optional shift
         if style == "g" or style == "m":
             kpts = [int(i) for i in lines[3].split()]
             kpts_shift = (0, 0, 0)
@@ -1087,7 +1097,7 @@ class Kpoints(MSONable):
             return Kpoints.gamma_automatic(kpts, kpts_shift) if style == "g" \
                 else Kpoints.monkhorst_automatic(kpts, kpts_shift)
 
-        #Automatic kpoints with basis
+        # Automatic kpoints with basis
         if num_kpts <= 0:
             style = Kpoints.supported_modes.Cartesian if style in "ck" \
                 else Kpoints.supported_modes.Reciprocal
@@ -1096,7 +1106,7 @@ class Kpoints(MSONable):
             return Kpoints(comment=comment, num_kpts=num_kpts, style=style,
                            kpts=kpts, kpts_shift=kpts_shift)
 
-        #Line-mode KPOINTS, usually used with band structures
+        # Line-mode KPOINTS, usually used with band structures
         if style == "l":
             coord_type = "Cartesian" if lines[3].lower()[0] in "ck" \
                 else "Reciprocal"
@@ -1115,7 +1125,7 @@ class Kpoints(MSONable):
             return Kpoints(comment=comment, num_kpts=num_kpts, style=style,
                            kpts=kpts, coord_type=coord_type, labels=labels)
 
-        #Assume explicit KPOINTS if all else fails.
+        # Assume explicit KPOINTS if all else fails.
         style = Kpoints.supported_modes.Cartesian if style in "ck" \
             else Kpoints.supported_modes.Reciprocal
         kpts = []
@@ -1164,8 +1174,8 @@ class Kpoints(MSONable):
             f.write(self.__str__())
 
     def __str__(self):
-        lines = [self.comment, str(self.num_kpts), self.style]
-        style = self.style.lower()[0]
+        lines = [self.comment, str(self.num_kpts), self.style.value]
+        style = str(self.style).lower()[0]
         if style == "l":
             lines.append(self.coord_type)
         for i in range(len(self.kpts)):
@@ -1181,7 +1191,7 @@ class Kpoints(MSONable):
                 else:
                     lines[-1] += " %i" % (self.kpts_weights[i])
 
-        #Print tetrahedron parameters if the number of tetrahedrons > 0
+        # Print tetrahedron parameters if the number of tetrahedrons > 0
         if style not in "lagm" and self.tet_number > 0:
             lines.append("Tetrahedron")
             lines.append("%d %f" % (self.tet_number, self.tet_weight))
@@ -1190,7 +1200,7 @@ class Kpoints(MSONable):
                                                  vertices[1], vertices[2],
                                                  vertices[3]))
 
-        #Print shifts for automatic kpoints types if not zero.
+        # Print shifts for automatic kpoints types if not zero.
         if self.num_kpts <= 0 and tuple(self.kpts_shift) != (0, 0, 0):
             lines.append(" ".join([str(x) for x in self.kpts_shift]))
         return "\n".join(lines) + "\n"
@@ -1198,7 +1208,7 @@ class Kpoints(MSONable):
     def as_dict(self):
         """json friendly dict representation of Kpoints"""
         d = {"comment": self.comment, "nkpoints": self.num_kpts,
-             "generation_style": self.style, "kpoints": self.kpts,
+             "generation_style": str(self.style), "kpoints": self.kpts,
              "usershift": self.kpts_shift,
              "kpts_weights": self.kpts_weights, "coord_type": self.coord_type,
              "labels": self.labels, "tet_number": self.tet_number,
@@ -1217,10 +1227,12 @@ class Kpoints(MSONable):
     def from_dict(cls, d):
         comment = d.get("comment", "")
         generation_style = d.get("generation_style")
+        if generation_style is not None:
+            generation_style = Kpoints.supported_modes.__members__[generation_style]
+
         kpts = d.get("kpoints", [[1, 1, 1]])
         kpts_shift = d.get("usershift", [0, 0, 0])
         num_kpts = d.get("nkpoints", 0)
-        #coord_type = d.get("coord_type", None)
         return cls(comment=comment, kpts=kpts, style=generation_style,
                    kpts_shift=kpts_shift, num_kpts=num_kpts,
                    kpts_weights=d.get("kpts_weights"),

@@ -392,7 +392,7 @@ class BandStructure(object):
                     list_ind_kpts.append(i)
         else:
             list_ind_kpts.append(index)
-        #get all other bands sharing the vbm
+        # get all other bands sharing the vbm
         list_ind_band = {Spin.up: []}
         if self.is_spin_polarized:
             list_ind_band = {Spin.up: [], Spin.down: []}
@@ -889,7 +889,8 @@ class BandStructureSymmLine(BandStructure, MSONable):
     def from_dict(cls, d):
         """
         Args:
-            A dict with all data for a band structure symm line object.
+            d (dict): A dict with all data for a band structure symm line
+                object.
 
         Returns:
             A BandStructureSymmLine object
