@@ -770,15 +770,23 @@ class Kpoints(MSONable):
     """
 
     class supported_modes(Enum):
-        Automatic = "Automatic"
-        Gamma = "Gamma"
-        Monkhorst = "Monkhorst"
-        Line_mode = "Line_mode"
-        Cartesian = "Cartesian"
-        Reciprocal = "Reciprocal"
+        Automatic = 0
+        Gamma = 1
+        Monkhorst = 2
+        Line_mode = 3
+        Cartesian = 4
+        Reciprocal = 5
 
         def __str__(self):
-            return self.value
+            return self.name
+
+        @staticmethod
+        def from_string(s):
+            c = s.lower()[0]
+            for m in Kpoints.supported_modes:
+                if m.name.lower()[0] == c:
+                    return m
+            raise ValueError("Can't interprete Kpoint mode %s" % s)
 
     def __init__(self, comment="Default gamma", num_kpts=0,
                  style=supported_modes.Gamma,
@@ -828,6 +836,9 @@ class Kpoints(MSONable):
         if num_kpts > 0 and (not labels) and (not kpts_weights):
             raise ValueError("For explicit or line-mode kpoints, either the "
                              "labels or kpts_weights must be specified.")
+        if isinstance(style, six.string_types):
+            style = Kpoints.supported_modes.from_string(style)
+
         if style in (Kpoints.supported_modes.Automatic,
                      Kpoints.supported_modes.Gamma,
                      Kpoints.supported_modes.Monkhorst) and len(kpts) > 1:
@@ -975,7 +986,7 @@ class Kpoints(MSONable):
         mult = (ngrid * lengths[0] * lengths[1] * lengths[2]) ** (1 / 3)
         num_div = [int(round(mult / l)) for l in lengths]
 
-        #ensure that numDiv[i] > 0
+        # ensure that numDiv[i] > 0
         num_div = [i if i > 0 else 1 for i in num_div]
 
         # VASP documentation recommends to use even grids for n <= 8 and odd
@@ -1158,7 +1169,8 @@ class Kpoints(MSONable):
         except IndexError:
             pass
 
-        return Kpoints(comment=comment, num_kpts=num_kpts, style=style,
+        return Kpoints(comment=comment, num_kpts=num_kpts,
+                       style=Kpoints.supported_modes[str(style)],
                        kpts=kpts, kpts_weights=kpts_weights,
                        tet_number=tet_number, tet_weight=tet_weight,
                        tet_connections=tet_connections, labels=labels)
@@ -1174,8 +1186,8 @@ class Kpoints(MSONable):
             f.write(self.__str__())
 
     def __str__(self):
-        lines = [self.comment, str(self.num_kpts), self.style.value]
-        style = str(self.style).lower()[0]
+        lines = [self.comment, str(self.num_kpts), self.style.name]
+        style = self.style.name.lower()[0]
         if style == "l":
             lines.append(self.coord_type)
         for i in range(len(self.kpts)):
@@ -1208,7 +1220,7 @@ class Kpoints(MSONable):
     def as_dict(self):
         """json friendly dict representation of Kpoints"""
         d = {"comment": self.comment, "nkpoints": self.num_kpts,
-             "generation_style": str(self.style), "kpoints": self.kpts,
+             "generation_style": self.style.name, "kpoints": self.kpts,
              "usershift": self.kpts_shift,
              "kpts_weights": self.kpts_weights, "coord_type": self.coord_type,
              "labels": self.labels, "tet_number": self.tet_number,
@@ -1228,7 +1240,7 @@ class Kpoints(MSONable):
         comment = d.get("comment", "")
         generation_style = d.get("generation_style")
         if generation_style is not None:
-            generation_style = Kpoints.supported_modes.__members__[generation_style]
+            generation_style = Kpoints.supported_modes[generation_style]
 
         kpts = d.get("kpoints", [[1, 1, 1]])
         kpts_shift = d.get("usershift", [0, 0, 0])

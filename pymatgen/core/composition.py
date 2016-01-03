@@ -27,6 +27,8 @@ from six.moves import filter, map, zip
 
 from fractions import Fraction
 from functools import total_ordering
+from UserDict import IterableUserDict
+
 from monty.fractions import gcd
 from pymatgen.core.periodic_table import get_el_sp, Element
 from pymatgen.util.string_utils import formula_double_format
@@ -35,7 +37,7 @@ from pymatgen.core.units import unitized
 
 
 @total_ordering
-class Composition(collections.Mapping, collections.Hashable, MSONable):
+class Composition(IterableUserDict, collections.Hashable, MSONable):
     """
     Represents a Composition, which is essentially a {element:amount} mapping
     type. Composition is written to be immutable and hashable,
@@ -118,26 +120,36 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         # it's much faster to recognize a composition and use the elmap than
         # to pass the composition to dict()
         if len(args) == 1 and isinstance(args[0], Composition):
-            elmap = args[0]._elmap
+            elmap = args[0]
         elif len(args) == 1 and isinstance(args[0], six.string_types):
             elmap = self._parse_formula(args[0])
         else:
             elmap = dict(*args, **kwargs)
-        self._elmap = {}
+        elamt = {}
         self._natoms = 0
         for k, v in elmap.items():
             if v < -Composition.amount_tolerance and not self.allow_negative:
                 raise CompositionError("Amounts in Composition cannot be "
                                        "negative!")
             if abs(v) >= Composition.amount_tolerance:
-                self._elmap[get_el_sp(k)] = v
+                elamt[get_el_sp(k)] = v
                 self._natoms += abs(v)
+        super(Composition, self).__init__(elamt)
 
-    def __getitem__(self, el):
-        """
-        Get the amount for element.
-        """
-        return self._elmap.get(get_el_sp(el), 0)
+    def __missing__(self, el):
+        try:
+            sp = get_el_sp(el)
+            return self.get(sp, 0)
+        except ValueError as ex:
+            raise TypeError("Invalid key type for Composition")
+
+    def __contains__(self, item):
+        try:
+            sp = get_el_sp(item)
+            return sp in self.data
+        except ValueError:
+            raise TypeError("Invalid key type for Composition")
+
 
     def __eq__(self, other):
         #  elements with amounts < Composition.amount_tolerance don't show up
@@ -145,10 +157,18 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         #  compositions elements
         if len(self) != len(other):
             return False
-        for el, v in self._elmap.items():
+        for el, v in self.items():
             if abs(v - other[el]) > Composition.amount_tolerance:
                 return False
         return True
+
+    def __setitem__(self, key, value):
+        raise TypeError("Composition is immutable by construction."
+            "Setting of values is not allowed.")
+
+    def __delitem__(self, key):
+        raise TypeError("Composition is immutable by construction."
+            "Deleting values is not allowed.")
 
     def __ge__(self, other):
         """
@@ -218,22 +238,14 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         Compositions with different elements.
         """
         hashcode = 0
-        for el in self._elmap.keys():
-            hashcode += el.Z
+        for el, amt in self.items():
+            if abs(amt) > Composition.amount_tolerance:
+                hashcode += el.Z
         return hashcode
-
-    def __contains__(self, el):
-        return get_el_sp(el) in self._elmap
-
-    def __len__(self):
-        return len(self._elmap)
-
-    def __iter__(self):
-        return self._elmap.__iter__()
 
     @property
     def average_electroneg(self):
-        return sum((el.X * abs(amt) for el, amt in self._elmap.items())) / \
+        return sum((el.X * abs(amt) for el, amt in self.items())) / \
             self.num_atoms
 
     def almost_equals(self, other, rtol=0.1, atol=1e-8):
@@ -259,10 +271,10 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         """
         True if composition is for an element.
         """
-        return len(self._elmap) == 1
+        return len(self) == 1
 
     def copy(self):
-        return Composition(self._elmap, allow_negative=self.allow_negative)
+        return Composition(self, allow_negative=self.allow_negative)
 
     @property
     def formula(self):
@@ -334,7 +346,7 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
             A pretty normalized formula and a multiplicative factor, i.e.,
             Li4Fe4P4O16 returns (LiFePO4, 4).
         """
-        all_int = all(x == int(x) for x in self._elmap.values())
+        all_int = all(x == int(x) for x in self.values())
         if not all_int:
             return self.formula.replace(" ", ""), 1
         d = self.get_el_amt_dict()
@@ -380,7 +392,7 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         """
         Returns view of elements in Composition.
         """
-        return list(self._elmap.keys())
+        return list(self.keys())
 
     def __str__(self):
         return " ".join([
@@ -402,7 +414,7 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         Total molecular weight of Composition
         """
         return sum([amount * el.atomic_mass
-                    for el, amount in self._elmap.items()])
+                    for el, amount in self.items()])
 
     def get_atomic_fraction(self, el):
         """
@@ -470,8 +482,8 @@ class Composition(collections.Mapping, collections.Hashable, MSONable):
         anonymized_formula ABC3.
         """
         reduced = self.element_composition
-        if all(x == int(x) for x in self._elmap.values()):
-            reduced /= gcd(*self._elmap.values())
+        if all(x == int(x) for x in self.values()):
+            reduced /= gcd(*self.values())
 
         anon = ""
         for e, amt in zip(string.ascii_uppercase, sorted(reduced.values())):
