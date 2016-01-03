@@ -10,7 +10,8 @@ dependencies:
   override:
     - easy_install -U setuptools
     - pip install -q numpy
-    - pip install -r requirements.txt
+    - pip install -r requirements.txt:
+        timeout: 1200
     - pip install -r requirements-optional.txt
     - sudo apt-get install python-openbabel
     - python setup.py develop
