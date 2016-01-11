@@ -10,8 +10,9 @@ import numpy as np
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.surface import Slab, SlabGenerator, generate_all_slabs, \
-    GetMillerIndices
+    GetMillerIndices, symmetrize_slab
 from pymatgen.symmetry.groups import SpaceGroup
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.util.testing import PymatgenTest
 
 
@@ -29,12 +30,30 @@ class SlabTest(PymatgenTest):
         zno55 = SlabGenerator(zno1, [1, 0, 0], 5, 5, lll_reduce=False,
                               center_slab=False).get_slab()
 
+        Ti = Structure(Lattice.hexagonal(4.6, 2.82), ["Ti", "Ti", "Ti"],
+                       [[0.000000, 0.000000, 0.000000],
+                       [0.333333, 0.666667, 0.500000],
+                       [0.666667, 0.333333, 0.500000]])
+
+        Ag_fcc = Structure(Lattice.cubic(4.06), ["Ag", "Ag", "Ag", "Ag"],
+                           [[0.000000, 0.000000, 0.000000],
+                           [0.000000, 0.500000, 0.500000],
+                           [0.500000, 0.000000, 0.500000],
+                           [0.500000, 0.500000, 0.000000]])
+
+        laue_groups = ["-1", "2/m", "mmm", "4/m",
+                       "4/mmm", "-3", "-3m", "6/m",
+                       "6/mmm", "m-3", "m-3m"]
+
+        self.ti = Ti
+        self.agfcc = Ag_fcc
         self.zno1 = zno1
         self.zno55 = zno55
         self.h = Structure(Lattice.cubic(3), ["H"],
                             [[0, 0, 0]])
         self.libcc = Structure(Lattice.cubic(3.51004), ["Li", "Li"],
                                [[0, 0, 0], [0.5, 0.5, 0.5]])
+        self.laue_groups = laue_groups
 
     def test_init(self):
         zno_slab = Slab(self.zno55.lattice, self.zno55.species,
@@ -92,6 +111,57 @@ class SlabTest(PymatgenTest):
                              lll_reduce=False, center_slab=False).get_slab()
         self.assertArrayAlmostEqual(slab.dipole, [-4.209, 0, 0])
         self.assertTrue(slab.is_polar())
+
+    def test_symmetrization(self):
+
+        # Need to test structures with more than
+        # one species later for general usage
+
+        # Get all slabs for P6/mmm Ti and Fm-3m Ag up to index of 2
+
+        all_Ti_slabs = generate_all_slabs(self.ti, 2, 10, 10,
+                                             bonds=None, tol=1e-3, max_broken_bonds=0,
+                                             lll_reduce=False, center_slab=False, primitive=True,
+                                             max_normal_search=2, symmetrize=False)
+
+        all_Ag_fcc_slabs = generate_all_slabs(self.agfcc, 2, 10, 10,
+                                            bonds=None, tol=1e-3, max_broken_bonds=0,
+                                            lll_reduce=False, center_slab=False, primitive=True,
+                                            max_normal_search=2, symmetrize=False)
+
+        all_slabs = [all_Ti_slabs, all_Ag_fcc_slabs]
+
+        # Total number of assymetric slabs generated will be know beforehand
+        tot_asym_slabs = [10, 0]
+
+        for i, slabs in enumerate(all_slabs):
+
+            assymetric_count = 0
+            symmetric_count = 0
+
+            for i, slab in enumerate(slabs):
+                sg = SpacegroupAnalyzer(slab)
+                pg = sg.get_point_group()
+
+                # Check if a slab is symmetric
+                if str(pg) not in self.laue_groups:
+                    print "assymetric", slab.miller_index
+                    assymetric_count += 1
+                    slab = symmetrize_slab(slab)
+                    sg = SpacegroupAnalyzer(slab)
+                    pg = sg.get_point_group()
+
+                    # Check if new slab has been properly symmetrized
+                    if str(pg) in self.laue_groups:
+                        print "True"
+                        symmetric_count += 1
+                else:
+                    symmetric_count += 1
+
+            # Check if we obtained the initial expected number of
+            # assymetric slabs and if the new set of slabs are all symmetric
+            self.assertEqual(assymetric_count, tot_asym_slabs[i])
+            self.assertEqual(symmetric_count, len(slabs))
 
 
 class SlabGeneratorTest(PymatgenTest):

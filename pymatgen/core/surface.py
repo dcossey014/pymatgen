@@ -74,7 +74,7 @@ class Slab(Structure):
                  oriented_unit_cell, shift, scale_factor,
                  validate_proximity=False, to_unit_cell=False,
                  coords_are_cartesian=False, site_properties=None,
-                 energy=None, entry=None,
+                 energy=None, entry=None, ucell_entry=None,
                  pretty_formula=None, coh_energy=None,):
         """
         Makes a Slab structure, a structure object with additional information
@@ -119,6 +119,7 @@ class Slab(Structure):
             energy (float): A value for the energy.
         """
         self.oriented_unit_cell = oriented_unit_cell
+        self.ucell_entry = ucell_entry
         self.miller_index = tuple(miller_index)
         self.shift = shift
         self.scale_factor = scale_factor
@@ -131,6 +132,7 @@ class Slab(Structure):
             to_unit_cell=to_unit_cell,
             coords_are_cartesian=coords_are_cartesian,
             site_properties=site_properties)
+
 
     def get_orthogonal_c_slab(self):
         """
@@ -464,6 +466,7 @@ class SlabGenerator(object):
         self._proj_height = abs(np.dot(normal, c))
 
     def get_slab(self, shift=0, tol=0.1, energy=None):
+
         """
         This method takes in shift value for the c lattice direction and
         generates a slab based on the given shift. You should rarely use this
@@ -756,7 +759,7 @@ class GetMillerIndices(object):
 def generate_all_slabs(structure, max_index, min_slab_size, min_vacuum_size,
                        bonds=None, tol=1e-3, max_broken_bonds=0,
                        lll_reduce=False, center_slab=False, primitive=True,
-                       max_normal_search=None):
+                       max_normal_search=None, symmetrize=True):
     """
     A function that finds all different slabs up to a certain miller index.
     Slabs oriented under certain Miller indices that are equivalent to other
@@ -804,6 +807,8 @@ def generate_all_slabs(structure, max_index, min_slab_size, min_vacuum_size,
             vector as normal as possible (within the search range) to the
             surface. A value of up to the max absolute Miller index is
             usually sufficient.
+        symmetrize (bool): Whether or not to check if the surfaces of the
+            slabs are equivalent.
     """
     all_slabs = []
 
@@ -819,4 +824,55 @@ def generate_all_slabs(structure, max_index, min_slab_size, min_vacuum_size,
             logger.debug("%s has %d slabs... " % (miller, len(slabs)))
             all_slabs.extend(slabs)
 
-    return all_slabs
+        # Whether or not to make the two surfaces of the slabs symmetric
+    if symmetrize:
+        all_symmetric_slabs = [symmetrize_slab(slab) for slab in all_slabs]
+        return all_symmetric_slabs
+    else:
+        return all_slabs
+
+def symmetrize_slab(slab, tol=1e-3):
+
+    """
+    This method checks whether or not the two surfaces of the slab are
+    equivalent. If the point group of the slab has an inversion symmetry (ie.
+    belong to one of the Laue groups), then it is assumed that the surfaces
+    should be equivalent. Otherwise, sites at the bottom of the slab will be
+    removed until the slab is symmetric.
+
+    Arg:
+        slab (Structure): A single slab structure
+        tol (float): Tolerance for SpaceGroupanalyzer.
+
+    Returns:
+        Slab (structure): A symmetrized Slab object.
+    """
+
+    laue = ["-1", "2/m", "mmm", "4/m", "4/mmm",
+            "-3", "-3m", "6/m", "6/mmm", "m-3", "m-3m"]
+
+    sg = SpacegroupAnalyzer(slab, symprec=tol)
+    pg = sg.get_point_group()
+
+    if str(pg) in laue:
+        return slab
+    else:
+        asym = True
+        while asym == True:
+
+            # Keep removing sites from the bottom one
+            # by one until both surfaces are symmetric
+
+            c_dir = [site[2] for i, site in enumerate(slab.frac_coords)]
+
+            slab.remove_sites([c_dir.index(min(c_dir))])
+
+            # Check if the altered surface is symmetric
+
+            sg = SpacegroupAnalyzer(slab, symprec=tol)
+            pg = sg.get_point_group()
+
+            if str(pg) in laue:
+                asym = False
+
+    return slab

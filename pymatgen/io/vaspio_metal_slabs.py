@@ -11,6 +11,7 @@ from pymatgen.io.vasp.sets import MPVaspInputSet, DictVaspInputSet
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.matproj.rest import MPRester
+from pymatgen.core.structure import Structure
 
 
 """
@@ -66,6 +67,14 @@ class MPSlabVaspInputSet(DictVaspInputSet):
         kpoint0 is the first consideration,
         k_product is a second choice, default to 40
         """
+
+        # To get input sets, the input structure has to has the same number
+        # of required parameters as a Structure object (ie. 4). Slab
+        # attributes aren't going to affect the VASP inputs anyways so
+        # converting the slab into a structure should not matter
+
+        structure = Structure.from_dict(structure.as_dict())
+
         kpt = super(MPSlabVaspInputSet, self).get_kpoints(structure)
         kpt.comment = "Automatic mesh"
         kpt.style = 'Gamma'
@@ -90,6 +99,14 @@ class MPSlabVaspInputSet(DictVaspInputSet):
         return kpt
 
     def get_incar(self, structure):
+
+        # To get input sets, the input structure has to has the same number
+        # of required parameters as a Structure object (ie. 4). Slab
+        # attributes aren't going to affect the VASP inputs anyways so
+        # converting the slab into a structure should not matter
+
+        structure = Structure.from_dict(structure.as_dict())
+
         abc = structure.lattice.abc
         kpt_calc = [int(self.k_product/abc[0]+0.5),
                     int(self.k_product/abc[1]+0.5),
@@ -139,6 +156,14 @@ class MPSlabVaspInputSet(DictVaspInputSet):
         Returns:
             dict of {filename: file_as_string}, e.g., {'INCAR':'EDIFF=1e-4...'}
         """
+
+        # To get input sets, the input structure has to has the same number
+        # of required parameters as a Structure object (ie. 4). Slab
+        # attributes aren't going to affect the VASP inputs anyways so
+        # converting the slab into a structure should not matter
+
+        structure = Structure.from_dict(structure.as_dict())
+
         data = {'INCAR': self.get_incar(structure),
                 'KPOINTS': self.get_kpoints(structure),
                 'POSCAR': self.get_poscar(structure),
