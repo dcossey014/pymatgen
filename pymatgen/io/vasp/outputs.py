@@ -2182,61 +2182,88 @@ class Procar(object):
                     },
                     ...
             }
+
+    ..attribute:: phase_factors
+
+        Phase factors, where present (e.g. LORBIT = 12). This attribution is
+        a dict, whose keys are tuples of the format
+        (ion_index, kpoint_index, band_index, orbital_string). The values are
+        complex numbers.
     """
     def __init__(self, filename):
         data = defaultdict(dict)
+        phase_factors = {}
         headers = None
         with zopen(filename, "rt") as f:
-            lines = list(clean_lines(f.readlines()))
-            self.name = lines[0]
-            kpointexpr = re.compile("^\s*k-point\s+(\d+).*weight = ([0-9\.]+)")
-            bandexpr = re.compile("^\s*band\s+(\d+)")
+            lines = list(f.readlines())
+            self.name = lines.pop(0)
+            kpointexpr = re.compile("^k-point\s+(\d+).*weight = ([0-9\.]+)")
+            bandexpr = re.compile("^band\s+(\d+)")
             ionexpr = re.compile("^ion.*")
-            expr = re.compile("^\s*([0-9]+)\s+")
-            dataexpr = re.compile("[\.0-9]+")
+            expr = re.compile("^([0-9]+)\s+")
             weight = 0
             current_kpoint = 0
             current_band = 0
+            done = False
             for l in lines:
+                l = l.strip()
+                # TODO: This is really bad. Why are we not using zero-based
+                # indexing for kpoints and bands?
                 if bandexpr.match(l):
                     m = bandexpr.match(l)
                     current_band = int(m.group(1))
+                    done = False
                 elif kpointexpr.match(l):
                     m = kpointexpr.match(l)
                     current_kpoint = int(m.group(1))
                     weight = float(m.group(2))
+                    done = False
                 elif headers is None and ionexpr.match(l):
                     headers = l.split()
                     headers.pop(0)
                     headers.pop(-1)
                 elif expr.match(l):
-                    linedata = dataexpr.findall(l)
-                    num_data = [float(i) for i in linedata]
-                    #Convert to zero-based indexing for atoms.
-                    index = int(num_data.pop(0)) - 1
-                    num_data.pop(-1)
-                    if current_kpoint not in data[index]:
-                        data[index][current_kpoint] = {"weight": weight,
-                                                       "bands": {}}
-                    data[index][current_kpoint]["bands"][current_band] = \
-                        dict(zip(headers, num_data))
+                    if not done:
+                        toks = l.split()
+                        index = int(toks.pop(0)) - 1
+                        num_data = [float(i) for i in toks[:-1]]
+                        if current_kpoint not in data[index]:
+                            data[index][current_kpoint] = {"weight": weight,
+                                                           "bands": {}}
+                        data[index][current_kpoint]["bands"][current_band] = \
+                            dict(zip(headers, num_data))
+                    else:
+                        # TODO: Add unit test for phase factor parsing.
+                        toks = l.split()
+                        index = int(toks.pop(0)) - 1
+                        num_data = np.array([float(i) for i in toks[:-1]],
+                                            dtype=np.complex128)
+                        for val, o in zip(num_data, headers):
+                            key = (index, current_kpoint, current_band, o)
+                            if key not in phase_factors:
+                                phase_factors[key] = val
+                            else:
+                                phase_factors[key] += 1j * val
+                elif l.startswith("tot"):
+                    done = True
+
             self.data = data
-            self._nb_kpoints = len(data[0].keys())
-            self._nb_bands = len(data[0][1]["bands"].keys())
+            self.phase_factors = phase_factors
 
     @property
-    def nb_bands(self):
-        """
-        returns the number of bands in the band structure
-        """
-        return self._nb_bands
+    def nbands(self):
+        """Number of bands"""
+        return len(self.data[0][1]["bands"].keys())
 
     @property
-    def nb_kpoints(self):
-        """
-        Returns the number of k-points in the band structure calculation
-        """
-        return self._nb_kpoints
+    def nkpoints(self):
+        """Number of k-points"""
+        return len(self.data[0].keys())
+
+    @property
+    def nions(self):
+        """Number of ions"""
+        return len(self.data)
 
     def get_projection_on_elements(self, structure):
         """
@@ -2251,8 +2278,8 @@ class Procar(object):
         """
         dico = {Spin.up: []}
         dico[Spin.up] = [[defaultdict(float)
-                          for i in range(self._nb_kpoints)]
-                         for j in range(self.nb_bands)]
+                          for i in range(self.nkpoints)]
+                         for j in range(self.nbands)]
 
         for iat in self.data:
             name = structure.species[iat].symbol
