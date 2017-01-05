@@ -129,7 +129,7 @@ class Kgrid(object):
 
     def write_input(self, filename):
         prim_struct = self.structure.get_primitive_structure()
-        prim_lvs = prim_struct.lattice_vectors()
+        prim_lvs = prim_struct.lattice.matrix
         prim_coords = prim_struct.cart_coords
         if isinstance(self.offset_type, list):
             kgrid_offset = "{0:< 5.3f} {1:< 5.3f} {2:< 5.3f}\n".format(
