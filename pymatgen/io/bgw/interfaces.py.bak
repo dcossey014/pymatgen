@@ -1,0 +1,90 @@
+import os
+
+from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, FileTransferTask
+
+from pymatgen import Structure
+from pymatgen.io.bgw.pwscf_tasks import WritePwscfInputTask, SimplePWTask
+
+
+class BGWDirStructure(FireTaskBase):
+    '''
+    Docstring
+    '''
+    required_params = ['structure']
+    optional_params = []
+
+    def run_task(self, fw_spec):
+        self.structure = Structure.from_dict(self.get('structure', {}))
+        basename = self.structure.composition.reduced_formula
+
+        dir_list = ['07-epsilon', '08-sigma', '09-kernel', '10-absorption',
+                    '11-sig2wan', 'ESPRESSO/00-kgrid',
+                    'ESPRESSO/01-scf/{}.save'.format(basename), 
+                    'ESPRESSO/02-wfn/{}.save'.format(basename),
+                    'ESPRESSO/03-wfnq/{}.save'.format(basename), 
+                    'ESPRESSO/04-wfn_co/{}.save'.format(basename), 
+                    'ESPRESSO/05-wfn_fi/{}.save'.format(basename), 
+                    'ESPRESSO/06-wfnq_fi/{}.save'.format(basename),
+                    'ESPRESSO/07-wannier/{}.save'.format(basename)]
+
+        for i in dir_list:
+            os.makedirs(i)
+
+class BGWSymbolicLinks(FireTaskBase):
+    '''
+    Docstring
+    '''
+    required_params = ['structure','potentials'] # Get potenttials directly from structure?
+    optional_params = []
+
+    def run_task(self, fw_spec):
+        self.potentials = self.get('potentials', [])
+        self.structure = self.get('structure', None)
+        basename = self.structure.composition.reduced_formula
+        
+        dir_list = ['ESPRESSO/01-scf/','ESPRESSO/02-wfn/','ESPRESSO/03-wfnq/',
+                    'ESPRESSO/04-wfn_co/','ESPRESSO/05-wfn_fi/','ESPRESSO/06-wfnq_fi/',
+                    'ESPRESSO/07-wannier/']
+        save_dirs = ['ESPRESSO/01-scf/{}.save/'.format(basename), 
+                    'ESPRESSO/02-wfn/{}.save/'.format(basename),
+                    'ESPRESSO/03-wfnq/{}.save/'.format(basename), 
+                    'ESPRESSO/04-wfn_co/{}.save/'.format(basename), 
+                    'ESPRESSO/05-wfn_fi/{}.save/'.format(basename), 
+                    'ESPRESSO/06-wfnq_fi/{}.save/'.format(basename),
+                    'ESPRESSO/07-wannier/{}.save/'.format(basename)]
+        dir_list2 = ['07-epsilon/', '08-sigma/', '09-kernel/', 
+                    '10-absorption/', '11-sig2wan/']
+
+        for i in self.potentials:
+            for j in dir_list:
+                os.symlink('../../'+i, j+i)
+
+        for i in save_dirs[1:]:
+            for j in ['data-file.xml', 'charge-density.dat']:
+                os.symlink('../../'+save_dirs[0]+j.format(basename),i+j)
+
+        for i in ['eps0mat', 'epsmat', 'eps0mat.h5', 'epsmat.h5']:
+            for j in dir_list2[1:4]:
+                os.symlink('../'+dir_list2[0]+i, j+i)
+
+        os.symlink('../'+dir_list[1]+'wfn.real', dir_list2[0]+'WFN')
+        os.symlink('../'+dir_list[2]+'wfn.real', dir_list2[0]+'WFNq')
+
+        os.symlink('../'+dir_list[3]+'vxc.dat', dir_list2[1]+'vxc.dat')
+        os.symlink('../'+dir_list[3]+'rho.real', dir_list2[1]+'RHO')
+        os.symlink('../'+dir_list[3]+'wfn.real', dir_list2[1]+'WFN_inner')
+
+        os.symlink('../'+dir_list[3]+'wfn.real', dir_list2[2]+'WFN_co')
+
+        os.symlink('../'+dir_list[3]+'wfn.real', dir_list2[3]+'WFN_co')
+        os.symlink('../'+dir_list[4]+'wfn.real', dir_list2[3]+'WFN_fi')
+        os.symlink('../'+dir_list[5]+'wfn.real', dir_list2[3]+'WFNq_fi')
+        os.symlink('../'+dir_list2[2]+'bsedmat', dir_list2[3]+'bsedmat')
+        os.symlink('../'+dir_list2[2]+'bsexmat', dir_list2[3]+'bsexmat')
+        os.symlink('../'+dir_list2[2]+'bsemat.h5', dir_list2[3]+'bsemat.h5')
+
+        os.symlink('../'+dir_list2[3]+'sigma_hp.log', dir_list2[4]+'sigma_hp.log')
+        os.symlink('../'+dir_list[6]+'silicon.nnkp', dir_list2[4]+'silicon.nnkp')
+        os.symlink('../'+dir_list[6]+'silicon.amn',  dir_list2[4]+'silicon.amn')
+        os.symlink('../'+dir_list[6]+'silicon.mmn',  dir_list2[4]+'silicon.mmn')
+
