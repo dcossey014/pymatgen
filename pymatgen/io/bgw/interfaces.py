@@ -11,7 +11,7 @@ from pymatgen import Structure
 from pymatgen.io.pwscf import PWInput
 from pymatgen.io.bgw.kgrid import QeMeanFieldGrids
 from pymatgen.io.bgw.inputs import BgwInput, BgwInputTask, PW2BGWInput
-from pymatgen.io.bgw.pwscf_tasks import PWJob, BGWJob, BgwCustodianTask
+from pymatgen.io.bgw.pwscf_tasks import PWJob, BGWJob, BgwDB, BgwCustodianTask
 
 def load_class(mod, name):
     mod = __import__(mod, globals(), locals(), [name], 0)
@@ -241,6 +241,9 @@ class BgwWorkflow():
             if not self.deps and id != 0:
                     self.dependency[self.fws[id-1]]=( [fw_task] if isinstance(fw_task,
                                         Firework) else [fw_task.Firework] )
+        db_fw = Firework(BgwDB(config_file='bgw_db.yaml'), name="BGW DB Task")
+        self.fws.append(db_fw)
+        self.dependency[self.fws[id]] = [db_fw]
         self.wf = Workflow(self.fws, self.dependency, name=self.name)
 
         # Try to establish connection with Launchpad

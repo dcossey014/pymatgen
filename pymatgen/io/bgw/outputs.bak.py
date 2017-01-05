@@ -20,7 +20,6 @@ from monty.io import zopen, reverse_readfile
 from monty.re import regrep
 from monty.json import jsanitize
 
-from fireworks import Firework, LaunchPad
 from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.core.structure import Structure
 from pymatgen.core.units import unitized
@@ -364,65 +363,20 @@ class QeBgwRun(MSONable):
     def __init__(self, dirname='.'):
         self.dirname = dirname
         self.bgw_types = ['epsilon', 'sigma', 'kernel', 'absorption']
-        esp_dirs = []
-        bgw_outputs = []
         for root, dirs, files in os.walk(self.dirname):
             if "ESPRESSO" in dirs:
-                esp_dirs.append(os.path.join(root, "ESPRESSO"))
-
+                esp_dir = os.path.join(root, "ESPRESSO")
+                break
+        if esp_dir:
+            self.esp_runs = EspressoRun(esp_dir)
+        
+        bgw_outputs = []
+        for root, dirs, files in os.walk(self.dirname):
             out_file = glob.glob(os.path.join(root, "OUT*"))
             if out_file:
                 bgw_outputs.append(out_file[0])
-
-        try:
-            lp = Launchpad.from_file(os.path.join(os.environ['HOME'], '.fireworks', 'my_launchpad.yaml'))
-            for i,esp_run in  enumerate(esp_dirs):
-                #TODO: remove esp_run from esp_dirs???  Look Into this, might not be necessary
-                fw_id = self._get_fw_id(os.path.dirname(esp_run))
-                wf = lp.get_wf_summary_dict(fw_id)
-                wf_states = wf['states']
-                wf_dirs = wf['launch_dirs']
-                incomplete = []
-                for rtype, state in wf_states.items():
-                    if state != "COMPLETED":
-                        incomplete.append("{}: {}".format(rtype, wf_states[rtype]))
-                if incomplete:
-                    print("Incomplete runs:")
-                    print('\n'.join(i for i in incomplete))
-                    print("Will not compile the information at this time")
-                    continue
-
-                self.esp_data = EspressoRun(esp_run)
-                #TODO: remove each BGWrun from bgw_outputs
-                # Remove esp_dir from wf_dirs such that we don't scan it as 
-                # bgw_run
-                bgw_wf_runs = []
-                for k,v in wf_dirs.items():
-                    v = v[0]
-                    edir = esp_run.split('/')[-2]
-                    if not edir in v:
-                        bgw_wf_runs.append(v)
-                    else:
-                        continue
-
-                for i,bgw_run in wf_dirs.items():
-                    pass
-
-            #for fout in bgw_outputs:
-            #    fw_id = self._get_fw_id(os.path.dirname(fout))
-            #    linked_runs = lp.get_wf_summary_dict(fw_id)['launch_dirs'] 
-        except:
-            print("Unable to contact LaunchPad Server to verify "
-                    "links between runs.  Continuing as if directory "
-                    "contains only runs from single Molecular System.")
-            if bgw_outputs:
-                self.bgw_runs = self._parse_bgw_outputs(bgw_outputs)
-
-
-    def _get_fw_id(self, dir):
-        fw = Firework.from_file(os.path.join(dir, 'FW.json'))
-        return fw.fw_id
-
+        if bgw_outputs:
+            self.bgw_runs = self._parse_bgw_outputs(bgw_outputs)
 
     def _parse_bgw_outputs(self, bgw_files):
         print("working with these outputs: {}".format(bgw_files))

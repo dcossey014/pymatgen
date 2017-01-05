@@ -20,6 +20,8 @@ import traceback
 import subprocess
 import shlex
 
+from monty.serialization import loadfn
+
 from pymatgen import Structure
 from pymatgen.io.pwscf import PWInput, PWInputError, PWOutput
 from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, Workflow, LaunchPad
@@ -149,10 +151,75 @@ class BgwCustodianTask(FireTaskBase):
 
 
 @explicit_serialize
+class BgwDB(FireTaskBase):
+    required_params = ['config_file']
+    optional_params = []
+
+    def run_task(self, fw_spec):
+        db_config = loadfn(os.path.join(os.environ['HOME'], self.get(config_file)))
+        database = self.db_config.get('database', 'BGW_DATA')
+        collection = self.db_config.get('collection', 'DEFAULT')
+        username = self.db_config.get('username', None)
+        password = self.db_config.get('password', None)
+        ssl_ca_file = db_config.get('ssl_ca_file', None)
+
+
+        prev_dirs = fw_spec.get("PREV_DIR", None)
+        esp_dir = os.path.dirname(prev_dirs.get("ESPRESSO", {}).get("scf", None))
+        bgw_dirs = prev_dirs.get("BGW", {})
+        abs_dir = bgw_dirs.get("absorption", None)
+
+
+        if abs_dir:
+            run_data = {}
+            esp_data = EspressoRun(esp_dir)
+            d = {}
+            for i,r in enumerate(bgw_dirs):
+                out_file = glob.glob(os.path.join(r, "OUT.*"))
+
+                if len(out_files) > 1:
+                    raise BgwParserError(
+                            "Found more than one output file for "
+                            "Runtype: {}".format(tmp_out.runtype),
+                            {'err': 'Duplicate Run', 'file': out_file[-1]} )
+
+                tmp_out = BgwRun(out_file[0])
+                
+                if tmp_out.runtype not in d.keys() and tmp_out.timings:
+                    d.update(tmp_out.as_dict())
+
+                elif tmp_out.runtype in d.keys():
+                    raise BgwParserError(
+                            "Found more than one output file for "
+                            "Runtype: {}".format(tmp_out.runtype),
+                            {'err': 'Duplicate Run', 'file': r} )
+                else:
+                    raise BgwParserError(
+                            "Could not parse timings.  Make sure the run "
+                            "completed successfully.",
+                            {'err': 'Incomplete Run'} )
+
+            run_data['BGW'] = d
+            run_data['ESPRESSO'] = esp_data
+
+            connection = MongoClient(db_config['host'], db_config['port'],
+                            ssl_ca_certs=ssl_ca_file)
+            
+            db = connection['database']
+            if username:
+                db_auth = connection['admin']
+                db_auth.authenticate(username, password)
+
+            collection = db[collection]
+            collection.update(run_data)
+
+
+@explicit_serialize
 class WritePwscfInputTask(FireTaskBase):
 
     required_params = ["structure", "pseudo", "control"]
-    optional_params = ["system", "electrons", "ions", "cell", "kpoints_mode", "kpoints_grid", "kpoints_shift"]
+    optional_params = ["system", "electrons", "ions", "cell", "kpoints_mode", 
+                        "kpoints_grid", "kpoints_shift"]
 
     def run_task(self, fw_spec):
 
