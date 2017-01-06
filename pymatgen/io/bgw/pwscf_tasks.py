@@ -21,9 +21,11 @@ import subprocess
 import shlex
 
 from monty.serialization import loadfn
+from pymongo import MongoClient
 
 from pymatgen import Structure
 from pymatgen.io.pwscf import PWInput, PWInputError, PWOutput
+from pymatgen.io.bgw.outputs import BgwRun, EspressoRun
 from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, Workflow, LaunchPad
 from custodian.custodian import Job, Custodian
 
@@ -156,15 +158,15 @@ class BgwDB(FireTaskBase):
     optional_params = []
 
     def run_task(self, fw_spec):
-        db_config = loadfn(os.path.join(os.environ['HOME'], self.get(config_file)))
-        database = self.db_config.get('database', 'BGW_DATA')
-        collection = self.db_config.get('collection', 'DEFAULT')
-        username = self.db_config.get('username', None)
-        password = self.db_config.get('password', None)
+        db_config = loadfn(os.path.join(os.environ['HOME'], self.get('config_file')))
+        database = db_config.get('database', 'BGW_DATA')
+        collection = db_config.get('collection', 'DEFAULT')
+        username = db_config.get('username', None)
+        password = db_config.get('password', None)
         ssl_ca_file = db_config.get('ssl_ca_file', None)
 
 
-        prev_dirs = fw_spec.get("PREV_DIR", None)
+        prev_dirs = fw_spec.get("PREV_DIRS", None)
         esp_dir = os.path.dirname(prev_dirs.get("ESPRESSO", {}).get("scf", None))
         bgw_dirs = prev_dirs.get("BGW", {})
         abs_dir = bgw_dirs.get("absorption", None)
@@ -175,9 +177,9 @@ class BgwDB(FireTaskBase):
             esp_data = EspressoRun(esp_dir)
             d = {}
             for i,r in enumerate(bgw_dirs):
-                out_file = glob.glob(os.path.join(r, "OUT.*"))
+                out_file = glob.glob(os.path.join(bgw_dirs[r], "OUT.*"))
 
-                if len(out_files) > 1:
+                if len(out_file) > 1:
                     raise BgwParserError(
                             "Found more than one output file for "
                             "Runtype: {}".format(tmp_out.runtype),
