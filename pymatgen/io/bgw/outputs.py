@@ -70,6 +70,8 @@ class XmlDictConfig(dict):
         if parent_element.items():
             self.update(dict(parent_element.items()))
         for element in parent_element:
+            element.tag = ( element.tag if '.' not in element.tag
+                    else element.tag.replace('.', '_') )
             #print("element: {}".format(element))
             if element.text:
                 logger.debug("text: {}\n\n".format(element.text.strip()))
@@ -84,15 +86,15 @@ class XmlDictConfig(dict):
                     # here, we put the list in dictionary; the key is the
                     # tag name the list elements all share in common, and
                     # the value is the list itself 
-                    aDict = {element[0].tag: XmlListConfig(element)}
+                    aDict = {element[0].tag: XmlListConfig(element)} 
                 # if the tag has attributes, add those to the dict
                 if element.items():
                     aDict.update(dict(element.items()))
-                self.update({element.tag: aDict})
+                self.update({element.tag: aDict}) 
             # This assumes that you may have an attribute in a tag
             # along with text.  
             elif element.items() and element.text:
-                bDict = {element.tag: dict(element.items())}
+                bDict = {element.tag: dict(element.items())} 
                 cDict = bDict[element.tag]
                 text = element.text.strip()
                 size = int(element.attrib.get('size', 1))
@@ -114,11 +116,11 @@ class XmlDictConfig(dict):
             # this assumes that if you've got an attribute in a tag,
             # you won't be having any text. 
             elif element.items():
-                self.update({element.tag: dict(element.items())})
+                self.update({element.tag: dict(element.items())}) 
             # finally, if there are no child tags and no attributes, extract
             # the text
             else:
-                self.update({element.tag: element.text.strip()})
+                self.update({element.tag: element.text.strip()}) 
 
 
     def _parse_val(self, val, vtype):
@@ -277,6 +279,7 @@ class BgwRun(MSONable):
 
     def _parse_sigma_band_avg(self, i, j, stream):
         kpt = stream[i+2].strip().split()[2:5]
+        kpt = [k.replace('.', ',') for k in kpt]
         kpt_str = '   '.join(kpt)
         key = stream[i+4].strip().split()
         d = {}
@@ -309,7 +312,7 @@ class BgwRun(MSONable):
 
             if m.groups():
                 m.groups()
-                key = m.group(1).strip()
+                key = self.key_check(m.group(1).strip())
                 cpu_time = float(m.group(2).strip())
                 wall_time = float(m.group(3).strip())
                 if wall_time > 0:
@@ -338,6 +341,11 @@ class BgwRun(MSONable):
                 for i,k in enumerate(key, start=1):
                     d[ftype][k].append([l[0], l[i]])
         self.absorption.update(d)
+
+
+    def key_check(self, key):
+        return key if not '.' in key else key.replace('.', ',')
+
 
     def as_dict(self):
         d = {'BGW Version': self.ver,

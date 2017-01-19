@@ -16,6 +16,7 @@ import string
 import logging
 import datetime
 import traceback
+import pprint
 
 import subprocess
 import shlex
@@ -155,65 +156,79 @@ class BgwCustodianTask(FireTaskBase):
 @explicit_serialize
 class BgwDB(FireTaskBase):
     required_params = ['config_file']
-    optional_params = []
+    optional_params = ['insert_to_db']
 
     def run_task(self, fw_spec):
-        db_config = loadfn(os.path.join(os.environ['HOME'], self.get('config_file')))
-        database = db_config.get('database', 'BGW_DATA')
-        collection = db_config.get('collection', 'DEFAULT')
-        username = db_config.get('username', None)
-        password = db_config.get('password', None)
-        ssl_ca_file = db_config.get('ssl_ca_file', None)
+        self.db_config = loadfn(os.path.join(os.environ['HOME'], self.get('config_file')))
+        self.upload = self.get('insert_to_db', False)
+        self.database = self.db_config.get('database', 'BGW_DATA')
+        self.collection = self.db_config.get('collection', 'DEFAULT')
+        self.username = self.db_config.get('username', None)
+        self.password = self.db_config.get('password', None)
+        self.ssl_ca_file = self.db_config.get('ssl_ca_file', None)
 
 
-        prev_dirs = fw_spec.get("PREV_DIRS", None)
-        esp_dir = os.path.dirname(prev_dirs.get("ESPRESSO", {}).get("scf", None))
-        bgw_dirs = prev_dirs.get("BGW", {})
-        abs_dir = bgw_dirs.get("absorption", None)
+        self.prev_dirs = fw_spec.get("PREV_DIRS", None)
+        self.esp_dir = os.path.dirname(self.prev_dirs.get("ESPRESSO", {}).get("scf", None))
+        self.bgw_dirs = self.prev_dirs.get("BGW", {})
+        self.abs_dir = self.bgw_dirs.get("absorption", None)
 
 
-        if abs_dir:
+        if self.abs_dir:
+            bgw_data,esp_data = self.get_dict(self.esp_dir, self.bgw_dirs)
             run_data = {}
-            esp_data = EspressoRun(esp_dir)
-            d = {}
-            for i,r in enumerate(bgw_dirs):
-                out_file = glob.glob(os.path.join(bgw_dirs[r], "OUT.*"))
-
-                if len(out_file) > 1:
-                    raise BgwParserError(
-                            "Found more than one output file for "
-                            "Runtype: {}".format(tmp_out.runtype),
-                            {'err': 'Duplicate Run', 'file': out_file[-1]} )
-
-                tmp_out = BgwRun(out_file[0])
-                
-                if tmp_out.runtype not in d.keys() and tmp_out.timings:
-                    d.update(tmp_out.as_dict())
-
-                elif tmp_out.runtype in d.keys():
-                    raise BgwParserError(
-                            "Found more than one output file for "
-                            "Runtype: {}".format(tmp_out.runtype),
-                            {'err': 'Duplicate Run', 'file': r} )
-                else:
-                    raise BgwParserError(
-                            "Could not parse timings.  Make sure the run "
-                            "completed successfully.",
-                            {'err': 'Incomplete Run'} )
-
-            run_data['BGW'] = d
+            run_data['BGW'] = bgw_data
             run_data['ESPRESSO'] = esp_data
 
-            connection = MongoClient(db_config['host'], db_config['port'],
-                            ssl_ca_certs=ssl_ca_file)
-            
-            db = connection['database']
-            if username:
-                db_auth = connection['admin']
-                db_auth.authenticate(username, password)
+            if self.upload:
+                self.insert_db(run_data)
+            else:
+                pp = pprint.PrettyPrinter(indent=2)
+                pp.pprint(run_data)
 
-            collection = db[collection]
-            collection.update(run_data)
+
+    def get_dict(self, esp_dir, bgw_dirs):
+        esp_data = EspressoRun(esp_dir)
+        d = {}
+        for i,r in enumerate(bgw_dirs):
+            out_file = glob.glob(os.path.join(bgw_dirs[r], "OUT.*"))
+
+            if len(out_file) > 1:
+                raise BgwParserError(
+                        "Found more than one output file for "
+                        "Runtype: {}".format(tmp_out.runtype),
+                        {'err': 'Duplicate Run', 'file': out_file[-1]} )
+
+            tmp_out = BgwRun(out_file[0])
+            
+            if tmp_out.runtype not in d.keys() and tmp_out.timings:
+                d.update(tmp_out.as_dict())
+
+            elif tmp_out.runtype in d.keys():
+                raise BgwParserError(
+                        "Found more than one output file for "
+                        "Runtype: {}".format(tmp_out.runtype),
+                        {'err': 'Duplicate Run', 'file': r} )
+            else:
+                raise BgwParserError(
+                        "Could not parse timings.  Make sure the run "
+                        "completed successfully.",
+                        {'err': 'Incomplete Run'} )
+        
+        return (d, esp_data.as_dict())
+
+
+    def insert_db(self, run_data):
+        connection = MongoClient(self.db_config['host'], self.db_config['port'],
+                        ssl_ca_certs=self.ssl_ca_file)
+        
+        db = connection[self.database]
+        if self.username:
+            db_auth = connection['admin']
+            db_auth.authenticate(self.username, self.password)
+
+        collection = db[self.collection]
+        collection.insert_one(run_data)
 
 
 @explicit_serialize
