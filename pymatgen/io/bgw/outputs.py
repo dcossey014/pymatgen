@@ -164,6 +164,8 @@ class EspressoRun(MSONable):
 
         if self.parse_band_data:
             self.band_data = self._parse_band_data(self.run_dir)
+            self.band_data = self._collate_band_data(self.band_data)
+            
 
     def as_dict(self):
         d = {'data_file': self.data,
@@ -184,14 +186,35 @@ class EspressoRun(MSONable):
             if save_dir:
                 run_type = root.split('/')[-1]
                 band_data[run_type] = {}
+                band_data[run_type]['RAW'] = {}
 
             eigen_file = [s for s in files if "eigenval.xml" in s]
             if eigen_file:
                 kpt = root.split('/')[-1]
                 tree = ET.parse('{}/eigenval.xml'.format(root))
                 xmlroot = tree.getroot()
-                band_data[run_type][kpt] = XmlDictConfig(xmlroot)
+                band_data[run_type]['RAW'][kpt] = XmlDictConfig(xmlroot)
         return band_data
+
+    def _collate_band_data(self, bdata):
+        for run_type in bdata:
+            if 'SORTED' not in bdata[run_type].keys():
+                num_bands = int(bdata[run_type]['RAW']['K00001']['INFO']['nbnd'])
+
+                # Pymatgen Band Plotter needs Band Data in {'Spin.up': [[], ... , []],
+                # 'Spin.down': [[], ... , []]}.  The first index (M) of the 
+                # M x N array [[]] refers to the band and the second 
+                # index (N) refers to the Kpoint.  If band structure is not 
+                # spin polarized, only store one data set under "Spin.up".  
+                # This function assumes only non-polarized band data is given.
+                bdata[run_type]['SORTED'] = bds = [
+                        [] for _ in range(num_bands) ]
+
+            for kpt in sorted(bdata[run_type]['RAW']):
+                kp_data = bdata[run_type]['RAW'][kpt]['EIGENVALUES']['VALUE']
+                for i,v in enumerate(kp_data):
+                    bds[i].append(v)
+        return(bdata)
 
     def _parse_chg_dens(self, run_dir):
         chg_dict = {}
