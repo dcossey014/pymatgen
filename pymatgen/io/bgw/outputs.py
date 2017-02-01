@@ -154,6 +154,7 @@ class EspressoRun(MSONable):
                             root, self.save_dir[0])
                 self.data_file = "{}/{}/data-file.xml".format(
                             root, self.save_dir[0]) 
+                self.structure = self._parse_structure(self.scf_dir)
                 break
         tree = ET.parse(self.data_file)
         xmlroot = tree.getroot()
@@ -163,16 +164,71 @@ class EspressoRun(MSONable):
             self.charge_dict = self._parse_chg_dens(self.run_dir)
 
         if self.parse_band_data:
+            self.kpoints = {}
             self.band_data = self._parse_band_data(self.run_dir)
             self.band_data = self._collate_band_data(self.band_data)
             
 
     def as_dict(self):
-        d = {'data_file': self.data,
-             'band_data': self.band_data}
+        d = {'structure': self.structure,
+             'data_file': self.data,
+             'band_data': {'kpoints': self.kpoints,
+                 'eigenvalues': self.band_data}
+             }
         if self.parse_charge_density:
             d['charge_density'] = self.charge_dict['CHARGE-DENSITY']
         return d
+
+    def _parse_structure(self, d):
+        with open(os.path.join(d, 'in')) as f:
+            lines = f.readlines()
+        for i,line in enumerate(lines):
+            l = line.strip()
+            if 'nat' in l:
+                natoms = int(l.split()[-1].replace(',',''))
+            if 'ATOMIC_POSITIONS' in l:
+                apos = i + 1
+                atype = l.split()[-1]
+            if 'K_POINTS' in l and 'crystal' in l:
+                nkps = int(lines[i+1].strip())
+                kpos = i + 2
+            if 'CELL_PARAMETERS' in l:
+                units = l.split()[-1]
+                lpos = i + 1
+        #TODO : finish structure code
+        #     : add KPOINTS list for use in Band structure. 
+        #     : move KPOINTS to _parse_band_structure
+        species = []
+        atom_pos = []
+        lattice = []
+        #kpoints = []
+        for l in lines[apos:apos+natoms]:
+            l = l.strip().split()
+            species.append(l[0])
+            atom_pos.append([float(k) for k in l[1:4]])
+        for l in lines[lpos:lpos+3]:
+            l = l.strip().split()
+            lattice.append([float(k) for k in l])
+        #for l in lines[kpos:kpos+nkps]:
+        #    l = l.strip().split()
+        #    kpoints.append([float(k) for k in l[:-1]])
+        s = Structure(lattice, species, atom_pos)
+        return s.as_dict()
+
+    def _parse_kpoints(self, rdir):
+        with open(os.path.join(rdir, 'in')) as fin:
+            lines = fin.readlines()
+        kps = []
+        for i,line in enumerate(lines):
+            l = line.strip()
+            if 'K_POINTS' in l and 'crystal' in l:
+                nkps = int(lines[i+1].strip())
+                kpos = i + 2
+                break
+        for l in lines[kpos:kpos+nkps]:
+            l = l.strip().split()
+            kps.append([float(k) for k in l[:-1]])
+        return kps
 
     def _parse_band_data(self, run_dir):
         band_data = {}
@@ -187,6 +243,7 @@ class EspressoRun(MSONable):
                 run_type = root.split('/')[-1]
                 band_data[run_type] = {}
                 band_data[run_type]['RAW'] = {}
+                self.kpoints[run_type] = self._parse_kpoints(root)
 
             eigen_file = [s for s in files if "eigenval.xml" in s]
             if eigen_file:
@@ -213,7 +270,7 @@ class EspressoRun(MSONable):
             for kpt in sorted(bdata[run_type]['RAW']):
                 kp_data = bdata[run_type]['RAW'][kpt]['EIGENVALUES']['VALUE']
                 for i,v in enumerate(kp_data):
-                    bds[i].append(v)
+                    bds[i].append(v*27.2114)
         return(bdata)
 
     def _parse_chg_dens(self, run_dir):
