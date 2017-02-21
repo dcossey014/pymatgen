@@ -2,10 +2,49 @@ import os
 import sys
 import string
 import subprocess
+import seekpath
 
+import numpy as np
 from enum import Enum
 from pymatgen import Structure
 from monty.serialization import loadfn
+
+def generate_kpath(s, npts):
+    pos = s.frac_coords
+    nums = s.atomic_numbers
+    cell = s.lattice.matrix
+    struc = (cell, pos, nums)
+    kpath = seekpath.get_path(struc)
+    pcoords = kpath['point_coords']
+    path = list(kpath['path'])
+    rec_latt = kpath['reciprocal_primitive_lattice']
+
+    #Generate a continuous path
+    ep=0
+    for i,p in enumerate(path):
+        if ep != p[0] and i != 0:
+            path.insert(i, (ep, p[0]))
+        sp, ep = path[i][0], path[i][1]
+
+    # Gather total distance of path to subdivide
+    magnitude = []
+    for i in path:
+        vec = np.array(pcoords[i[1]]) - np.array(pcoords[i[0]])
+        abc_vec = vec.dot(rec_latt)
+        magnitude.append(np.linalg.norm(abc_vec))
+    total_length = sum(magnitude)
+
+    # Number of points per segment is divided evenly along path
+    # Path is stored in gen_kpath and returned
+    gen_kpath = [pcoords[path[0][0]]]
+    for i,p in enumerate(path):
+        length = np.array(pcoords[p[1]]) - np.array(pcoords[p[0]])
+        num_divs = int(round(magnitude[i] / total_length * npts, 0))
+        sub_div = length / num_divs
+        for j in range(num_divs):
+            gen_kpath.append(gen_kpath[-1] + sub_div)
+    return gen_kpath
+
 
 class QeMeanFieldGrids(object):
     '''

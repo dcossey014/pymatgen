@@ -7,12 +7,15 @@ __date__ = "2016-04-28"
 
 import six, glob, sys, errno
 import os
-from monty.io import zopen
 import mmap
 import fnmatch
 import re
 import copy as cp
 import subprocess
+
+from pymatgen.io.bgw.kgrid import generate_kpath
+
+from monty.io import zopen
 from monty.dev import deprecated
 from monty.serialization import loadfn
 from collections import defaultdict, OrderedDict
