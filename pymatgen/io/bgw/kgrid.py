@@ -43,6 +43,10 @@ def generate_kpath(s, npts):
         sub_div = length / num_divs
         for j in range(num_divs):
             gen_kpath.append(gen_kpath[-1] + sub_div)
+    #out = ['{:5d}\n'.format(len(gen_kpath))]
+    #out.extend([' {:15.10f} {:15.10f} {:15.10f}   1.0\n'.format(k[0],
+    #                            k[1], k[2]) for k in gen_kpath])
+    #out[-1] = out[-1].rstrip()
     return gen_kpath
 
 
@@ -61,9 +65,9 @@ class QeMeanFieldGrids(object):
                             else {'scf': kpoints, 'wfn': kpoints, 
                                 'wfn_co': kpoints, 'wfnq': kpoints})
         self.offset_type = ( offset_type if isinstance(offset_type, dict) \
-                            else {'scf': "Monkhorst-Pack", 
-                                'wfn': "Monkhorst-Pack", 'wfn_co': 'Gamma', 
-                                'wfnq': "Monkhorst-Pack", 
+                            else {'scf': offset_type, 
+                                'wfn': offset_type, 'wfn_co': 'Gamma', 
+                                'wfnq': offset_type, 
                                 'wfn_fi': [0.47, 0.37, 0.31],
                                 'wfnq_fi': [0.47, 0.37, 0.32]} )
         self.qshift = qshift

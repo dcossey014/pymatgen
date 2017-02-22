@@ -3,6 +3,7 @@ import glob
 import shutil
 
 import subprocess
+from pymatgen.io.bgw.kgrid import generate_kpath
 from monty.serialization import loadfn
 from fireworks import Firework, FireTaskBase, FWAction, \
                         explicit_serialize, FileTransferTask, Workflow
@@ -316,7 +317,8 @@ class QeMeanFieldTask(FireTaskBase):
     required_params = ['structure', 'kpoints', 'pseudo_dir', 'mpi_cmd', 'qe_control', 
                     'qe_system', 'qe_electrons', 'qe_pw2bgw', 'mf_tasks']
     optional_params = ['kgrid_offset_type', 'qshift', 'fftw_grid', 
-                    'bgw_rev_off', 'log_cart_kpts', 'pw_cmd', 'pw2bgw_cmd']
+                    'bgw_rev_off', 'log_cart_kpts', 'pw_cmd', 'pw2bgw_cmd',
+                    'bandstructure_kpoint_path', 'num_kpoints']
 
     def run_task(self, fw_spec):
 
@@ -353,6 +355,8 @@ class QeMeanFieldTask(FireTaskBase):
         fftw_grid = self.get('fftw_grid', [0,0,0])
         bgw_rev_off = self.get('bgw_rev_off', False)
         log_cart_kpts = self.get('log_cart_kpts', False)
+        self.alternate_kpoints = self.get('bandstructure_kpoint_path', False)
+        self.num_kpoints = self.get('num_kpoints', 500)
         self.pw = self.get('pw_cmd', 'pw.x')
         self.pw2bgw = self.get('pw2bgw_cmd', 'pw2bgw.x')
         self.prev_dirs = {'ESPRESSO': {}}
@@ -393,7 +397,16 @@ class QeMeanFieldTask(FireTaskBase):
         # function for setting up an mean field task
         def make_qemf_input(qe_task):
             self.dir_setup(qe_task)
-            qe_task_grid = qe_kgrids.generate_kgrid(qe_task)
+            if self.alternate_kpoints and qe_task != 'scf':
+                gen_kpoints = generate_kpath(self.structure, 
+                                self.num_kpoints)
+                qe_task_grid = ['{:5d}\n'.format(len(gen_kpoints))]
+                qe_task_grid.extend(
+                        [' {:15.10f} {:15.10f} {:15.10f}   1.0\n'.format(
+                            k[0], k[1], k[2]) for k in gen_kpath] )
+                qe_task_grid[-1] = qe_task_grid[-1].rstrip()
+            else:
+                qe_task_grid = qe_kgrids.generate_kgrid(qe_task)
         
             qe_task_control = qe_control.get(qe_task)
 
