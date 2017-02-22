@@ -469,7 +469,7 @@ class QeMeanFieldTask(FireTaskBase):
     def run_pw(self, pwx, dir_name, pw2bgwx=None):
         mpi_pw = list(self.mpi_cmd)
         mpi_pw.extend([pwx])
-        if pw2bgwx:
+        if pw2bgwx and not self.alternate_kpoints:
             mpi_pw2bgw = list(self.mpi_cmd)
             mpi_pw2bgw.extend([pw2bgwx])
             job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
