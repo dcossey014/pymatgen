@@ -421,7 +421,7 @@ class QeMeanFieldTask(FireTaskBase):
             qe_task_pw.write_file('in')
 
             #Write input file for pw2bgw to convert to wave function to BGW format
-            if qe_task != 'scf': 
+            if qe_task != 'scf' and not self.alternate_kpoints: 
                 print 'qe_task = ', qe_task
                 qe_task_pw2bgw = qe_pw2bgw.get(qe_task)
                 #print 'qe_task_pw2bgw = ', qe_task_pw2bgw
