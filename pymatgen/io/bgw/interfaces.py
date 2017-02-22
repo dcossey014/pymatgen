@@ -403,7 +403,7 @@ class QeMeanFieldTask(FireTaskBase):
                 qe_task_grid = ['{:5d}\n'.format(len(gen_kpoints))]
                 qe_task_grid.extend(
                         [' {:15.10f} {:15.10f} {:15.10f}   1.0\n'.format(
-                            k[0], k[1], k[2]) for k in gen_kpath] )
+                            k[0], k[1], k[2]) for k in gen_kpoints] )
                 qe_task_grid[-1] = qe_task_grid[-1].rstrip()
             else:
                 qe_task_grid = qe_kgrids.generate_kgrid(qe_task)
