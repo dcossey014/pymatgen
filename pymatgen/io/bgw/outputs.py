@@ -147,7 +147,7 @@ class EspressoRun(MSONable):
         for root, dirs, files in os.walk(run_dir, topdown=True):
             if 'scf' in dirs:
                 self.espresso_runs = list(dirs)
-            if 'scf' in root.split('/')[-1]:
+            if 'scf' in root.split('/')[-1].lower():
                 self.scf_dir = root
                 self.save_dir = [s for s in dirs if '.save' in s]
                 self.chg_file = "{}/{}/charge-density.xml".format(
@@ -240,7 +240,7 @@ class EspressoRun(MSONable):
             # strings across entire dir list)
             save_dir = [s for s in dirs if ".save" in s]
             if save_dir:
-                run_type = root.split('/')[-1]
+                run_type = root.split('/')[-1].lower()
                 band_data[run_type] = {}
                 band_data[run_type]['RAW'] = {}
                 self.kpoints[run_type] = self._parse_kpoints(root)
