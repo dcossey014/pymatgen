@@ -26,6 +26,9 @@ from pymatgen.core.structure import Structure
 from pymatgen.core.units import unitized
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
+from pymatgen.electronic_structure.bandstructure import Spin, BandStructureSymmLine
+from pymatgen.electronic_structure.plotter import BSPlotter
+from pymatgen.io.bgw.kgrid import Generate_Kpath
 from monty.json import MSONable
 
 logger = logging.getLogger(__name__)
@@ -179,6 +182,21 @@ class EspressoRun(MSONable):
             d['charge_density'] = self.charge_dict['CHARGE-DENSITY']
         return d
 
+    def plot_bands(self, run, filename):
+        kps = self.kpoints[run]
+        latt = self.structure.lattice.reciprocal_lattice
+        efermi = self.as_dict()['data_file']['BAND_STRUCTURE_INFO']['FERMI_ENERGY']['VALUE']*27.2114
+        evals = {Spin.up: self.band_data[run]['SORTED']}
+        kpath = Generate_Kpath(self.structure, len(kps)-1)
+        labels = kpath.pcoords
+
+        bs_struct = BandStructureSymmLine(kpoints=kps, eigenvals=evals,
+                        lattice=latt, efermi=efermi, labels_dict=labels, 
+                        structure=self.structure)
+        plotter = BSPlotter(bs_struct)
+        plotter.save_plot(filename)
+
+
     def _parse_structure(self, d):
         with open(os.path.join(d, 'in')) as f:
             lines = f.readlines()
@@ -213,7 +231,7 @@ class EspressoRun(MSONable):
         #    l = l.strip().split()
         #    kpoints.append([float(k) for k in l[:-1]])
         s = Structure(lattice, species, atom_pos)
-        return s.as_dict()
+        return s
 
     def _parse_kpoints(self, rdir):
         with open(os.path.join(rdir, 'in')) as fin:

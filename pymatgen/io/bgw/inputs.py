@@ -6,7 +6,7 @@ __email__ = "dcossey014@gmail.com"
 __date__ = "2016-04-28"
 
 import six, glob, sys, errno
-import os
+import os, abc
 import mmap
 import fnmatch
 import re
@@ -17,6 +17,7 @@ from pymatgen.io.bgw.kgrid import generate_kpath
 
 from monty.io import zopen
 from monty.dev import deprecated
+from monty.json import MSONable
 from monty.serialization import loadfn
 from collections import defaultdict, OrderedDict
 from pymatgen.io.bgw import Kgrid
@@ -788,6 +789,36 @@ class BGWInput():
                 run_type=None, kpoints=None, qshift=None, type='metal',
                 filename=out_file)
 
+
+class PwPpInput(abc.ABCMeta, MSONable):
+    #TODO   Look into MRO and inheritance vs python version
+    #       maybe use six for portability across versions like VASP?
+    '''
+    Docstring
+    '''
+
+    def as_dict(self):
+        d = MSONable.as_dict(self)
+        return d
+
+    @abc.abstractmethod
+    def write_input(self, filename):
+        """Write Input Files"""
+        pass
+
+class PwBandsInput(PwPpInput):
+    """
+    Docstring
+    """
+    def __init__(self, bands=None):
+        self.bands = bands
+
+
+    def __str__(self):
+        return
+
+    def write_input(self, filename):
+        pass
 
 class PW2BGWInput(object):
     '''
