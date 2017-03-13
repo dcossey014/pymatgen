@@ -177,7 +177,7 @@ class EspressoRun(MSONable):
 
     @property
     def rec_lattice(self):
-        return self.structure.lattice.rec_lattice
+        return self.structure.lattice.reciprocal_lattice
         
     def as_dict(self):
         d = {'structure': self.structure,
