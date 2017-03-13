@@ -189,19 +189,24 @@ class EspressoRun(MSONable):
             d['charge_density'] = self.charge_dict['CHARGE-DENSITY']
         return d
 
+    def gen_kpath(self, run):
+        kps = self.kpoints[run]
+        self.kpath = Generate_Kpath(self.structure, len(kps)-1)
+        return self.kpath
+
     def plot_bands(self, run, filename):
         kps = self.kpoints[run]
         latt = self.rec_lattice
         efermi = self.efermi
         evals = {Spin.up: self.band_data[run]['SORTED']}
         
-        kpath = Generate_Kpath(self.structure, len(kps)-1)
+        kpath = self.gen_kpath(run)
         labels = kpath.pcoords
 
         self.bandstructure = BandStructureSymmLine(kpoints=kps, 
                         eigenvals=evals,lattice=latt, efermi=efermi, 
                         labels_dict=labels, structure=self.structure)
-        plotter = BSPlotter(bs_struct)
+        plotter = BSPlotter(self.bandstructure)
         plotter.save_plot(filename)
 
 
