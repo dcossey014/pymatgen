@@ -171,7 +171,14 @@ class EspressoRun(MSONable):
             self.band_data = self._parse_band_data(self.run_dir)
             self.band_data = self._collate_band_data(self.band_data)
             
+    @property
+    def efermi(self):
+        return self.data['BAND_STRUCTURE_INFO']['FERMI_ENERGY']['VALUE']*27.2114
 
+    @property
+    def rec_lattice(self):
+        return self.structure.lattice.rec_lattice
+        
     def as_dict(self):
         d = {'structure': self.structure,
              'data_file': self.data,
@@ -184,15 +191,16 @@ class EspressoRun(MSONable):
 
     def plot_bands(self, run, filename):
         kps = self.kpoints[run]
-        latt = self.structure.lattice.reciprocal_lattice
-        efermi = self.as_dict()['data_file']['BAND_STRUCTURE_INFO']['FERMI_ENERGY']['VALUE']*27.2114
+        latt = self.rec_lattice
+        efermi = self.efermi
         evals = {Spin.up: self.band_data[run]['SORTED']}
+        
         kpath = Generate_Kpath(self.structure, len(kps)-1)
         labels = kpath.pcoords
 
-        bs_struct = BandStructureSymmLine(kpoints=kps, eigenvals=evals,
-                        lattice=latt, efermi=efermi, labels_dict=labels, 
-                        structure=self.structure)
+        self.bandstructure = BandStructureSymmLine(kpoints=kps, 
+                        eigenvals=evals,lattice=latt, efermi=efermi, 
+                        labels_dict=labels, structure=self.structure)
         plotter = BSPlotter(bs_struct)
         plotter.save_plot(filename)
 
