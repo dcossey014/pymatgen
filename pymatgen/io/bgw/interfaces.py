@@ -6,7 +6,7 @@ import subprocess
 from pymatgen.io.bgw.kgrid import generate_kpath
 from monty.serialization import loadfn
 from fireworks import Firework, FireTaskBase, FWAction, \
-                        explicit_serialize, FileTransferTask, Workflow
+                        explicit_serialize, FileTransferTask, Workflow, LaunchPad
 from custodian import Custodian
 from pymatgen import Structure
 from pymatgen.io.pwscf import PWInput
@@ -249,8 +249,7 @@ class BgwWorkflow():
 
         # Try to establish connection with Launchpad
         try:
-            self.LaunchPad=LaunchPad.from_file(os.path.join(os.environ["HOME"], 
-                                            ".fireworks", "my_launchpad.yaml"))
+            self.LaunchPad=LaunchPad.from_file(os.path.join(os.environ["HOME"],".fireworks", "my_launchpad.yaml"))
         except:
             self.LaunchPad = None
 
@@ -300,7 +299,7 @@ class BgwWorkflow():
 
     def add_wf_to_launchpad(self):
         if self.LaunchPad:
-            self.LaunchPad.add_wf(self.Workflow)
+            self.LaunchPad.add_wf(self.wf)
         else:
             print("No connection to LaunchPad. \n"
                     "Use 'to_file(<filename>)' to write a yaml file\n"
