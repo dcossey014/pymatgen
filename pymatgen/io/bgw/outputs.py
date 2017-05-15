@@ -207,7 +207,8 @@ class EspressoRun(MSONable):
                         eigenvals=evals,lattice=latt, efermi=efermi, 
                         labels_dict=labels, structure=self.structure)
         plotter = BSPlotter(self.bandstructure)
-        plotter.save_plot(filename)
+        plt = plotter.get_plot(usetex=False)
+        plt.savefig(filename, format=filename.split('.')[-1])
 
 
     def _parse_structure(self, d):

@@ -376,7 +376,7 @@ class QeMeanFieldTask(FireTaskBase):
             return '[%s%s]'%(c.lower(),c.upper()) if c.isalpha() else c
         self.pseudo = {}
         for i in self.structure.symbol_set:
-            pattern="{}/{}*.UPF".format(self.pseudo_dir,i)
+            pattern="{}/{}_*.UPF".format(self.pseudo_dir,i)
             new_pattern=''.join(either(char) for char in pattern)
             pps=glob.glob(new_pattern)
             self.pseudo[i.encode('ascii', 'ignore')] = pps[-1].split('/')[-1]

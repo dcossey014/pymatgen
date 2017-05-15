@@ -58,7 +58,7 @@ class BGWJob(Job):
         print "in BGWJob.run, cmd = ", cmd
         logger.debug("in BGWJob.run, cmd = ", cmd)
         with open(self.output_file, 'w') as f:
-            p = subprocess.Popen(cmd, stdout=f)
+            p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
         return p
 
     def postprocess(self):
@@ -73,7 +73,8 @@ class BGWJob(Job):
                         (str, unicode)) else list(self.pp_cmd)
             #print "running PostProcessing with: ", cmd
             logger.debug("running PostProcessing with: ", cmd)
-            p = subprocess.Popen(cmd)
+            with open("pp.out", 'w') as f:                
+                p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
             p.wait()
 
 
@@ -218,6 +219,11 @@ class BgwDB(FireTaskBase):
         return (d, esp_data.as_dict())
 
 
+    def to_dict(self):
+        d = {}
+        return d
+
+
     def insert_db(self, run_data):
         connection = MongoClient(self.db_config['host'], self.db_config['port'],
                         ssl_ca_certs=self.ssl_ca_file)
@@ -278,7 +284,6 @@ class SimplePWTask(FireTaskBase):
 
 
 class PWJob(Job):
-
     def __init__(self, pw_cmd, pw2bgw_cmd=None, output_file="out"):
         print "in PWJob.__init__"
         self.pw_cmd=pw_cmd
@@ -294,7 +299,7 @@ class PWJob(Job):
         print "in PWJob.run, cmd = ", cmd
         fin=open("in",'r')
         with open(self.output_file, 'w') as f:
-            p = subprocess.Popen(cmd, stdin=fin, stdout=f)
+            p = subprocess.Popen(cmd, stdin=fin, stdout=f, stderr=subprocess.STDOUT)
         return p
 
     def postprocess(self):
@@ -312,6 +317,6 @@ class PWJob(Job):
             print "running PostProcessing with: ", cmd
             fin=open('pp_in', 'r')
             with open('pp_out', 'w') as f:
-                p = subprocess.Popen(cmd, stdin=fin, stdout=f)
+                p = subprocess.Popen(cmd, stdin=fin, stdout=f, stderr=subprocess.STDOUT)
             p.wait()
 
