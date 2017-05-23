@@ -194,7 +194,8 @@ class EspressoRun(MSONable):
         self.kpath = Generate_Kpath(self.structure, len(kps)-1)
         return self.kpath
 
-    def plot_bands(self, run, filename):
+    def plot_bands(self, run, filename, ylim=None, 
+                    zero_to_efermi=True, usetex=False, smooth=False):
         kps = self.kpoints[run]
         latt = self.rec_lattice
         efermi = self.efermi
@@ -207,7 +208,8 @@ class EspressoRun(MSONable):
                         eigenvals=evals,lattice=latt, efermi=efermi, 
                         labels_dict=labels, structure=self.structure)
         plotter = BSPlotter(self.bandstructure)
-        plt = plotter.get_plot(usetex=False)
+        plt = plotter.get_plot(ylim=ylim, zero_to_efermi=zero_to_efermi,
+                            smooth=smooth, usetex=usetex)
         plt.savefig(filename, format=filename.split('.')[-1])
 
 
