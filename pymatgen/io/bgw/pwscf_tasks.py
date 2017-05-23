@@ -219,11 +219,6 @@ class BgwDB(FireTaskBase):
         return (d, esp_data.as_dict())
 
 
-    def to_dict(self):
-        d = {}
-        return d
-
-
     def insert_db(self, run_data):
         connection = MongoClient(self.db_config['host'], self.db_config['port'],
                         ssl_ca_certs=self.ssl_ca_file)

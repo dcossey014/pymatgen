@@ -50,7 +50,7 @@ class BgwFirework():
     
     def __init__(self, bgw_task, name="Bgw FW", bgw_cmd=None,
                 handlers=None, handler_params=None, ppx=None,
-                mpi_cmd='mpiexec_mpt -n 36', config_file=None,
+                mpi_cmd='mpiexec_mpt -n ${BC_MPI_TASKS_ALLOC}', config_file=None,
                 complex=False):
         #TODO: Fix BGW_cmd and handlers.  Correct OUT file configuration.
         self.name = name
@@ -242,9 +242,9 @@ class BgwWorkflow():
             if not self.deps and id != 0:
                     self.dependency[self.fws[id-1]]=( [fw_task] if isinstance(fw_task,
                                         Firework) else [fw_task.Firework] )
-        db_fw = Firework(BgwDB(config_file='bgw_db.yaml', insert_to_db=True), name="BGW DB Task")
-        self.fws.append(db_fw)
-        self.dependency[self.fws[id]] = [db_fw]
+        #db_fw = Firework(BgwDB(config_file='bgw_db.yaml', insert_to_db=True), name="BGW DB Task")
+        #self.fws.append(db_fw)
+        #self.dependency[self.fws[id]] = [db_fw]
         self.wf = Workflow(self.fws, self.dependency, name=self.name)
 
         # Try to establish connection with Launchpad
@@ -476,6 +476,44 @@ class QeMeanFieldTask(FireTaskBase):
             job = PWJob(mpi_pw)
         c = Custodian(handlers=[], validators=[], jobs=[job])
         self.output[dir_name] = c.run()
+
+    def add_spec(self, key, val):
+        # To use nested dictionary entries, use "->"
+        # as the separator for nested dictionaries
+        # i.e. '_queueadapter->walltime' as the key 
+        # to set {'_queueadapter': {'walltime': 'val'}}
+        def get_nested_dict(input_dict, key):
+            current = input_dict
+            toks = key.split("->")
+            n = len(toks)
+            for i, tok in enumerate(toks):
+                if tok not in current and i < n - 1:
+                    current[tok] = {}
+                elif i == n - 1:
+                    return current, toks[-1]
+                current = current[tok]
+
+        def get_nested_dict2(input_dict, val):
+            current = input_dict
+            for k, v in val.items():
+                if isinstance(v, dict):
+                    if k not in current.keys():
+                        current[k] = {}
+                    current = current[k]
+                    get_nested_dict2(current, v)
+                else:
+                    current[k] = v            
+
+        if isinstance(val, dict):
+            if key not in self.Firework.spec:
+                self.Firework.spec[key] = {}
+            current = self.Firework.spec[key]
+            get_nested_dict2(current, val)            
+
+        else:
+            (d, k) = get_nested_dict(self.Firework.spec, key)
+            d[k] = val
+
 
 @explicit_serialize
 class BgwAbsTask(FireTaskBase):
