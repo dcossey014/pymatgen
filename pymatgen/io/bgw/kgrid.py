@@ -2,10 +2,109 @@ import os
 import sys
 import string
 import subprocess
+import seekpath
 
+import numpy as np
 from enum import Enum
 from pymatgen import Structure
 from monty.serialization import loadfn
+
+def generate_kpath(s, npts):
+    pos = s.frac_coords
+    nums = s.atomic_numbers
+    cell = s.lattice.matrix
+    struc = (cell, pos, nums)
+    kpath = seekpath.get_path(struc)
+    pcoords = kpath['point_coords']
+    path = list(kpath['path'])
+    rec_latt = kpath['reciprocal_primitive_lattice']
+
+    #Generate a continuous path
+    ep=0
+    for i,p in enumerate(path):
+        if ep != p[0] and i != 0:
+            path.insert(i, (ep, p[0]))
+        sp, ep = path[i][0], path[i][1]
+
+    # Gather total distance of path to subdivide
+    magnitude = []
+    for i in path:
+        vec = np.array(pcoords[i[1]]) - np.array(pcoords[i[0]])
+        abc_vec = vec.dot(rec_latt)
+        magnitude.append(np.linalg.norm(abc_vec))
+    total_length = sum(magnitude)
+
+    # Number of points per segment is divided evenly along path
+    # Path is stored in gen_kpath and returned
+    gen_kpath = [pcoords[path[0][0]]]
+    for i,p in enumerate(path):
+        length = np.array(pcoords[p[1]]) - np.array(pcoords[p[0]])
+        num_divs = int(round(magnitude[i] / total_length * npts, 0))
+        sub_div = length / num_divs
+        for j in range(num_divs):
+            gen_kpath.append(gen_kpath[-1] + sub_div)
+    #out = ['{:5d}\n'.format(len(gen_kpath))]
+    #out.extend([' {:15.10f} {:15.10f} {:15.10f}   1.0\n'.format(k[0],
+    #                            k[1], k[2]) for k in gen_kpath])
+    #out[-1] = out[-1].rstrip()
+    return gen_kpath
+
+
+class Generate_Kpath(object):
+    def __init__(self, structure, num_points):
+        self.structure = structure
+        self.npts = num_points
+        pos = self.structure.frac_coords
+        nums = self.structure.atomic_numbers
+        cell = self.structure.lattice.matrix
+        struc = (cell, pos, nums)
+
+        self.kpath = seekpath.get_path(struc)
+        self.pcoords = self.kpath['point_coords']
+        self.path = list(self.kpath['path'])
+        self.rec_latt = self.kpath['reciprocal_primitive_lattice']
+        self.gen_kpath = self.create_path(self.pcoords, self.path, 
+                            self.rec_latt, self.npts)
+
+    def __repr__(self):
+        outs = ["K-Point Path Summary", "Path:"]
+        for p in self.path:
+            outs.append("  {:^5} {:>22}   ->   {:^5} {:>22}".format(
+                        p[0], tuple(self.pcoords[p[0]]), 
+                        p[1], tuple(self.pcoords[p[1]]) ) 
+                        )
+        outs.extend(["", "Number of K-Points Along Path: ", 
+                "  {}".format(self.npts)] )
+        return "\n".join(outs)
+
+
+    def create_path(self, pcoords, path, rec_latt, npts):
+        #Generate a continuous path
+        ep=0
+        for i,p in enumerate(path):
+            if ep != p[0] and i != 0:
+                path.insert(i, (ep, p[0]))
+            sp, ep = path[i][0], path[i][1]
+ 
+        # Gather total distance of path to subdivide
+        magnitude = []
+        for i in path:
+            vec = np.array(pcoords[i[1]]) - np.array(pcoords[i[0]])
+            abc_vec = vec.dot(rec_latt)
+            magnitude.append(np.linalg.norm(abc_vec))
+        total_length = sum(magnitude)
+ 
+        # Number of points per segment is divided evenly along path
+        # Path is stored in gen_kpath and returned
+        gen_kpath = [pcoords[path[0][0]]]
+        for i,p in enumerate(path):
+            length = np.array(pcoords[p[1]]) - np.array(pcoords[p[0]])
+            num_divs = int(round(magnitude[i] / total_length * npts, 0)) 
+            sub_div = length / num_divs
+            for j in range(num_divs):
+                gen_kpath.append(gen_kpath[-1] + sub_div)
+        return gen_kpath
+ 
 
 class QeMeanFieldGrids(object):
     '''
@@ -22,9 +121,9 @@ class QeMeanFieldGrids(object):
                             else {'scf': kpoints, 'wfn': kpoints, 
                                 'wfn_co': kpoints, 'wfnq': kpoints})
         self.offset_type = ( offset_type if isinstance(offset_type, dict) \
-                            else {'scf': "Monkhorst-Pack", 
-                                'wfn': "Monkhorst-Pack", 'wfn_co': 'Gamma', 
-                                'wfnq': "Monkhorst-Pack", 
+                            else {'scf': offset_type, 
+                                'wfn': offset_type, 'wfn_co': 'Gamma', 
+                                'wfnq': offset_type, 
                                 'wfn_fi': [0.47, 0.37, 0.31],
                                 'wfnq_fi': [0.47, 0.37, 0.32]} )
         self.qshift = qshift
@@ -129,7 +228,7 @@ class Kgrid(object):
 
     def write_input(self, filename):
         prim_struct = self.structure.get_primitive_structure()
-        prim_lvs = prim_struct.lattice_vectors()
+        prim_lvs = prim_struct.lattice.matrix
         prim_coords = prim_struct.cart_coords
         if isinstance(self.offset_type, list):
             kgrid_offset = "{0:< 5.3f} {1:< 5.3f} {2:< 5.3f}\n".format(

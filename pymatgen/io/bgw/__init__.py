@@ -6,5 +6,6 @@ __email__ = 'dcossey014@gmail.com; david.cossey@engilitycorp.com'
 __date__ = '10/25/15'
 
 from .pwscf_tasks import WritePwscfInputTask
-from .kgrid import Kgrid, QeMeanFieldGrids
+from .kgrid import Kgrid, Generate_Kpath, QeMeanFieldGrids
 from .inputs import *
+from .outputs import *

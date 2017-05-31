@@ -29,6 +29,58 @@ logger = logging.getLogger(__name__)
 
 BGW_BACKUP_FILES = ["OUT.*", "*.inp", "FW*", "bgw.log", "pbs.log"]
 
+class QuantumEspressoErrorHandler(ErrorHandler):
+    '''
+    Error handler for Quantum Espresso Jobs
+    '''
+
+    is_monitor=True
+    err_msgs = {'ndiag':['Error in routine check_para_diag',
+                         'Too few bands for required ndiag'
+                         ],
+                'n_plane_waves':['Error in routine n_plane_waves',
+                                 'No plane waves found: running on too many processors?'
+                                 ]
+                }
+
+    def __init__(self):
+        """
+        Initializes with an output file name.
+
+        Args:
+            output_filename (str): This is the file where the stdout for nwchem
+                is being redirected. The error messages that are checked are
+                present in the stdout. Defaults to "mol.nwout", which is the
+                default redirect used by :class:`custodian.nwchem.jobs
+                .NwchemJob`.
+        """
+        self.pwi = PWInput.from_file("in")
+        self.output_filename = "out"
+
+    def check(self):
+        '''
+        Checks output file for errors.
+        '''
+
+        self.errors = set()
+        with open(self.output_filename, 'r') as fout:
+            for line in f:
+                l = line.strip()
+                for err, msgs in BgwErrorHandler.error_msgs.items():
+                    for msg in msgs:
+                        if l.find(msg) != -1:
+                            self.errors.add(err)
+        return len(self.errors) > 0
+
+    def correct(self):
+        backup(BGW_BACKUP_FILES)
+        actions = []
+
+        return {"errors": self.errors, "actions": actions}
+
+    def __str__(self):
+        return "BgwErrorHandler"
+
 class BgwErrorHandler(ErrorHandler):
     """
     Error handler for BerkeleyGW Jobs. 
@@ -71,6 +123,7 @@ class BgwErrorHandler(ErrorHandler):
     def correct(self):
         backup(BGW_BACKUP_FILES)
         actions = []
+
         return {"errors": self.errors, "actions": actions}
 
     def __str__(self):

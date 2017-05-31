@@ -20,15 +20,11 @@ from monty.io import zopen, reverse_readfile
 from monty.re import regrep
 from monty.json import jsanitize
 
-from fireworks import Firework, LaunchPad
 from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.core.structure import Structure
 from pymatgen.core.units import unitized
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
-from pymatgen.electronic_structure.bandstructure import Spin, BandStructureSymmLine
-from pymatgen.electronic_structure.plotter import BSPlotter
-from pymatgen.io.bgw.kgrid import Generate_Kpath
 from monty.json import MSONable
 
 logger = logging.getLogger(__name__)
@@ -73,8 +69,6 @@ class XmlDictConfig(dict):
         if parent_element.items():
             self.update(dict(parent_element.items()))
         for element in parent_element:
-            element.tag = ( element.tag if '.' not in element.tag
-                    else element.tag.replace('.', '_') )
             #print("element: {}".format(element))
             if element.text:
                 logger.debug("text: {}\n\n".format(element.text.strip()))
@@ -89,15 +83,15 @@ class XmlDictConfig(dict):
                     # here, we put the list in dictionary; the key is the
                     # tag name the list elements all share in common, and
                     # the value is the list itself 
-                    aDict = {element[0].tag: XmlListConfig(element)} 
+                    aDict = {element[0].tag: XmlListConfig(element)}
                 # if the tag has attributes, add those to the dict
                 if element.items():
                     aDict.update(dict(element.items()))
-                self.update({element.tag: aDict}) 
+                self.update({element.tag: aDict})
             # This assumes that you may have an attribute in a tag
             # along with text.  
             elif element.items() and element.text:
-                bDict = {element.tag: dict(element.items())} 
+                bDict = {element.tag: dict(element.items())}
                 cDict = bDict[element.tag]
                 text = element.text.strip()
                 size = int(element.attrib.get('size', 1))
@@ -119,11 +113,11 @@ class XmlDictConfig(dict):
             # this assumes that if you've got an attribute in a tag,
             # you won't be having any text. 
             elif element.items():
-                self.update({element.tag: dict(element.items())}) 
+                self.update({element.tag: dict(element.items())})
             # finally, if there are no child tags and no attributes, extract
             # the text
             else:
-                self.update({element.tag: element.text.strip()}) 
+                self.update({element.tag: element.text.strip()})
 
 
     def _parse_val(self, val, vtype):
@@ -150,14 +144,13 @@ class EspressoRun(MSONable):
         for root, dirs, files in os.walk(run_dir, topdown=True):
             if 'scf' in dirs:
                 self.espresso_runs = list(dirs)
-            if 'scf' in root.split('/')[-1].lower():
+            if 'scf' in root.split('/')[-1]:
                 self.scf_dir = root
                 self.save_dir = [s for s in dirs if '.save' in s]
                 self.chg_file = "{}/{}/charge-density.xml".format(
                             root, self.save_dir[0])
                 self.data_file = "{}/{}/data-file.xml".format(
                             root, self.save_dir[0]) 
-                self.structure = self._parse_structure(self.scf_dir)
                 break
         tree = ET.parse(self.data_file)
         xmlroot = tree.getroot()
@@ -167,102 +160,14 @@ class EspressoRun(MSONable):
             self.charge_dict = self._parse_chg_dens(self.run_dir)
 
         if self.parse_band_data:
-            self.kpoints = {}
             self.band_data = self._parse_band_data(self.run_dir)
-            self.band_data = self._collate_band_data(self.band_data)
-            
-    @property
-    def efermi(self):
-        return self.data['BAND_STRUCTURE_INFO']['FERMI_ENERGY']['VALUE']*27.2114
 
-    @property
-    def rec_lattice(self):
-        return self.structure.lattice.reciprocal_lattice
-        
     def as_dict(self):
-        d = {'structure': self.structure,
-             'data_file': self.data,
-             'band_data': {'kpoints': self.kpoints,
-                 'eigenvalues': self.band_data}
-             }
+        d = {'data_file': self.data,
+             'band_data': self.band_data}
         if self.parse_charge_density:
             d['charge_density'] = self.charge_dict['CHARGE-DENSITY']
         return d
-
-    def gen_kpath(self, run):
-        kps = self.kpoints[run]
-        self.kpath = Generate_Kpath(self.structure, len(kps)-1)
-        return self.kpath
-
-    def plot_bands(self, run, filename, ylim=None, 
-                    zero_to_efermi=True, usetex=False, smooth=False):
-        kps = self.kpoints[run]
-        latt = self.rec_lattice
-        efermi = self.efermi
-        evals = {Spin.up: self.band_data[run]['SORTED']}
-        
-        kpath = self.gen_kpath(run)
-        labels = kpath.pcoords
-
-        self.bandstructure = BandStructureSymmLine(kpoints=kps, 
-                        eigenvals=evals,lattice=latt, efermi=efermi, 
-                        labels_dict=labels, structure=self.structure)
-        plotter = BSPlotter(self.bandstructure)
-        plt = plotter.get_plot(ylim=ylim, zero_to_efermi=zero_to_efermi,
-                            smooth=smooth, usetex=usetex)
-        plt.savefig(filename, format=filename.split('.')[-1])
-
-
-    def _parse_structure(self, d):
-        with open(os.path.join(d, 'in')) as f:
-            lines = f.readlines()
-        for i,line in enumerate(lines):
-            l = line.strip()
-            if 'nat' in l:
-                natoms = int(l.split()[-1].replace(',',''))
-            if 'ATOMIC_POSITIONS' in l:
-                apos = i + 1
-                atype = l.split()[-1]
-            if 'K_POINTS' in l and 'crystal' in l:
-                nkps = int(lines[i+1].strip())
-                kpos = i + 2
-            if 'CELL_PARAMETERS' in l:
-                units = l.split()[-1]
-                lpos = i + 1
-        #TODO : finish structure code
-        #     : add KPOINTS list for use in Band structure. 
-        #     : move KPOINTS to _parse_band_structure
-        species = []
-        atom_pos = []
-        lattice = []
-        #kpoints = []
-        for l in lines[apos:apos+natoms]:
-            l = l.strip().split()
-            species.append(l[0])
-            atom_pos.append([float(k) for k in l[1:4]])
-        for l in lines[lpos:lpos+3]:
-            l = l.strip().split()
-            lattice.append([float(k) for k in l])
-        #for l in lines[kpos:kpos+nkps]:
-        #    l = l.strip().split()
-        #    kpoints.append([float(k) for k in l[:-1]])
-        s = Structure(lattice, species, atom_pos)
-        return s
-
-    def _parse_kpoints(self, rdir):
-        with open(os.path.join(rdir, 'in')) as fin:
-            lines = fin.readlines()
-        kps = []
-        for i,line in enumerate(lines):
-            l = line.strip()
-            if 'K_POINTS' in l and 'crystal' in l:
-                nkps = int(lines[i+1].strip())
-                kpos = i + 2
-                break
-        for l in lines[kpos:kpos+nkps]:
-            l = l.strip().split()
-            kps.append([float(k) for k in l[:-1]])
-        return kps
 
     def _parse_band_data(self, run_dir):
         band_data = {}
@@ -274,38 +179,16 @@ class EspressoRun(MSONable):
             # strings across entire dir list)
             save_dir = [s for s in dirs if ".save" in s]
             if save_dir:
-                run_type = root.split('/')[-1].lower()
+                run_type = root.split('/')[-1]
                 band_data[run_type] = {}
-                band_data[run_type]['RAW'] = {}
-                self.kpoints[run_type] = self._parse_kpoints(root)
 
             eigen_file = [s for s in files if "eigenval.xml" in s]
             if eigen_file:
                 kpt = root.split('/')[-1]
                 tree = ET.parse('{}/eigenval.xml'.format(root))
                 xmlroot = tree.getroot()
-                band_data[run_type]['RAW'][kpt] = XmlDictConfig(xmlroot)
+                band_data[run_type][kpt] = XmlDictConfig(xmlroot)
         return band_data
-
-    def _collate_band_data(self, bdata):
-        for run_type in bdata:
-            if 'SORTED' not in bdata[run_type].keys():
-                num_bands = int(bdata[run_type]['RAW']['K00001']['INFO']['nbnd'])
-
-                # Pymatgen Band Plotter needs Band Data in {'Spin.up': [[], ... , []],
-                # 'Spin.down': [[], ... , []]}.  The first index (M) of the 
-                # M x N array [[]] refers to the band and the second 
-                # index (N) refers to the Kpoint.  If band structure is not 
-                # spin polarized, only store one data set under "Spin.up".  
-                # This function assumes only non-polarized band data is given.
-                bdata[run_type]['SORTED'] = bds = [
-                        [] for _ in range(num_bands) ]
-
-            for kpt in sorted(bdata[run_type]['RAW']):
-                kp_data = bdata[run_type]['RAW'][kpt]['EIGENVALUES']['VALUE']
-                for i,v in enumerate(kp_data):
-                    bds[i].append(v*27.2114)
-        return(bdata)
 
     def _parse_chg_dens(self, run_dir):
         chg_dict = {}
@@ -393,7 +276,6 @@ class BgwRun(MSONable):
 
     def _parse_sigma_band_avg(self, i, j, stream):
         kpt = stream[i+2].strip().split()[2:5]
-        kpt = [k.replace('.', ',') for k in kpt]
         kpt_str = '   '.join(kpt)
         key = stream[i+4].strip().split()
         d = {}
@@ -426,7 +308,7 @@ class BgwRun(MSONable):
 
             if m.groups():
                 m.groups()
-                key = self.key_check(m.group(1).strip())
+                key = m.group(1).strip()
                 cpu_time = float(m.group(2).strip())
                 wall_time = float(m.group(3).strip())
                 if wall_time > 0:
@@ -456,11 +338,6 @@ class BgwRun(MSONable):
                     d[ftype][k].append([l[0], l[i]])
         self.absorption.update(d)
 
-
-    def key_check(self, key):
-        return key if not '.' in key else key.replace('.', ',')
-
-
     def as_dict(self):
         d = {'BGW Version': self.ver,
                 'Revision': self.rev,
@@ -486,65 +363,20 @@ class QeBgwRun(MSONable):
     def __init__(self, dirname='.'):
         self.dirname = dirname
         self.bgw_types = ['epsilon', 'sigma', 'kernel', 'absorption']
-        esp_dirs = []
-        bgw_outputs = []
         for root, dirs, files in os.walk(self.dirname):
             if "ESPRESSO" in dirs:
-                esp_dirs.append(os.path.join(root, "ESPRESSO"))
-
+                esp_dir = os.path.join(root, "ESPRESSO")
+                break
+        if esp_dir:
+            self.esp_runs = EspressoRun(esp_dir)
+        
+        bgw_outputs = []
+        for root, dirs, files in os.walk(self.dirname):
             out_file = glob.glob(os.path.join(root, "OUT*"))
             if out_file:
                 bgw_outputs.append(out_file[0])
-
-        try:
-            lp = Launchpad.from_file(os.path.join(os.environ['HOME'], '.fireworks', 'my_launchpad.yaml'))
-            for i,esp_run in  enumerate(esp_dirs):
-                #TODO: remove esp_run from esp_dirs???  Look Into this, might not be necessary
-                fw_id = self._get_fw_id(os.path.dirname(esp_run))
-                wf = lp.get_wf_summary_dict(fw_id)
-                wf_states = wf['states']
-                wf_dirs = wf['launch_dirs']
-                incomplete = []
-                for rtype, state in wf_states.items():
-                    if state != "COMPLETED":
-                        incomplete.append("{}: {}".format(rtype, wf_states[rtype]))
-                if incomplete:
-                    print("Incomplete runs:")
-                    print('\n'.join(i for i in incomplete))
-                    print("Will not compile the information at this time")
-                    continue
-
-                self.esp_data = EspressoRun(esp_run)
-                #TODO: remove each BGWrun from bgw_outputs
-                # Remove esp_dir from wf_dirs such that we don't scan it as 
-                # bgw_run
-                bgw_wf_runs = []
-                for k,v in wf_dirs.items():
-                    v = v[0]
-                    edir = esp_run.split('/')[-2]
-                    if not edir in v:
-                        bgw_wf_runs.append(v)
-                    else:
-                        continue
-
-                for i,bgw_run in wf_dirs.items():
-                    pass
-
-            #for fout in bgw_outputs:
-            #    fw_id = self._get_fw_id(os.path.dirname(fout))
-            #    linked_runs = lp.get_wf_summary_dict(fw_id)['launch_dirs'] 
-        except:
-            print("Unable to contact LaunchPad Server to verify "
-                    "links between runs.  Continuing as if directory "
-                    "contains only runs from single Molecular System.")
-            if bgw_outputs:
-                self.bgw_runs = self._parse_bgw_outputs(bgw_outputs)
-
-
-    def _get_fw_id(self, dir):
-        fw = Firework.from_file(os.path.join(dir, 'FW.json'))
-        return fw.fw_id
-
+        if bgw_outputs:
+            self.bgw_runs = self._parse_bgw_outputs(bgw_outputs)
 
     def _parse_bgw_outputs(self, bgw_files):
         print("working with these outputs: {}".format(bgw_files))

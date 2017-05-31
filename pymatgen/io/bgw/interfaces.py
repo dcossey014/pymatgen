@@ -3,15 +3,16 @@ import glob
 import shutil
 
 import subprocess
+from pymatgen.io.bgw.kgrid import generate_kpath
 from monty.serialization import loadfn
 from fireworks import Firework, FireTaskBase, FWAction, \
-                        explicit_serialize, FileTransferTask, Workflow
+                        explicit_serialize, FileTransferTask, Workflow, LaunchPad
 from custodian import Custodian
 from pymatgen import Structure
 from pymatgen.io.pwscf import PWInput
 from pymatgen.io.bgw.kgrid import QeMeanFieldGrids
 from pymatgen.io.bgw.inputs import BgwInput, BgwInputTask, PW2BGWInput
-from pymatgen.io.bgw.pwscf_tasks import PWJob, BGWJob, BgwCustodianTask
+from pymatgen.io.bgw.pwscf_tasks import PWJob, BGWJob, BgwDB, BgwCustodianTask
 
 def load_class(mod, name):
     mod = __import__(mod, globals(), locals(), [name], 0)
@@ -49,7 +50,7 @@ class BgwFirework():
     
     def __init__(self, bgw_task, name="Bgw FW", bgw_cmd=None,
                 handlers=None, handler_params=None, ppx=None,
-                mpi_cmd='mpiexec_mpt -n 36', config_file=None,
+                mpi_cmd='mpiexec_mpt -n ${BC_MPI_TASKS_ALLOC}', config_file=None,
                 complex=False):
         #TODO: Fix BGW_cmd and handlers.  Correct OUT file configuration.
         self.name = name
@@ -241,12 +242,14 @@ class BgwWorkflow():
             if not self.deps and id != 0:
                     self.dependency[self.fws[id-1]]=( [fw_task] if isinstance(fw_task,
                                         Firework) else [fw_task.Firework] )
+        #db_fw = Firework(BgwDB(config_file='bgw_db.yaml', insert_to_db=True), name="BGW DB Task")
+        #self.fws.append(db_fw)
+        #self.dependency[self.fws[id]] = [db_fw]
         self.wf = Workflow(self.fws, self.dependency, name=self.name)
 
         # Try to establish connection with Launchpad
         try:
-            self.LaunchPad=LaunchPad.from_file(os.path.join(os.environ["HOME"], 
-                                            ".fireworks", "my_launchpad.yaml"))
+            self.LaunchPad=LaunchPad.from_file(os.path.join(os.environ["HOME"],".fireworks", "my_launchpad.yaml"))
         except:
             self.LaunchPad = None
 
@@ -296,7 +299,7 @@ class BgwWorkflow():
 
     def add_wf_to_launchpad(self):
         if self.LaunchPad:
-            self.LaunchPad.add_wf(self.Workflow)
+            self.LaunchPad.add_wf(self.wf)
         else:
             print("No connection to LaunchPad. \n"
                     "Use 'to_file(<filename>)' to write a yaml file\n"
@@ -313,7 +316,8 @@ class QeMeanFieldTask(FireTaskBase):
     required_params = ['structure', 'kpoints', 'pseudo_dir', 'mpi_cmd', 'qe_control', 
                     'qe_system', 'qe_electrons', 'qe_pw2bgw', 'mf_tasks']
     optional_params = ['kgrid_offset_type', 'qshift', 'fftw_grid', 
-                    'bgw_rev_off', 'log_cart_kpts', 'pw_cmd', 'pw2bgw_cmd']
+                    'bgw_rev_off', 'log_cart_kpts', 'pw_cmd', 'pw2bgw_cmd',
+                    'bandstructure_kpoint_path', 'num_kpoints']
 
     def run_task(self, fw_spec):
 
@@ -350,6 +354,8 @@ class QeMeanFieldTask(FireTaskBase):
         fftw_grid = self.get('fftw_grid', [0,0,0])
         bgw_rev_off = self.get('bgw_rev_off', False)
         log_cart_kpts = self.get('log_cart_kpts', False)
+        self.alternate_kpoints = self.get('bandstructure_kpoint_path', False)
+        self.num_kpoints = self.get('num_kpoints', 500)
         self.pw = self.get('pw_cmd', 'pw.x')
         self.pw2bgw = self.get('pw2bgw_cmd', 'pw2bgw.x')
         self.prev_dirs = {'ESPRESSO': {}}
@@ -370,7 +376,7 @@ class QeMeanFieldTask(FireTaskBase):
             return '[%s%s]'%(c.lower(),c.upper()) if c.isalpha() else c
         self.pseudo = {}
         for i in self.structure.symbol_set:
-            pattern="{}/{}*.UPF".format(self.pseudo_dir,i)
+            pattern="{}/{}_*.UPF".format(self.pseudo_dir,i)
             new_pattern=''.join(either(char) for char in pattern)
             pps=glob.glob(new_pattern)
             self.pseudo[i.encode('ascii', 'ignore')] = pps[-1].split('/')[-1]
@@ -390,7 +396,16 @@ class QeMeanFieldTask(FireTaskBase):
         # function for setting up an mean field task
         def make_qemf_input(qe_task):
             self.dir_setup(qe_task)
-            qe_task_grid = qe_kgrids.generate_kgrid(qe_task)
+            if self.alternate_kpoints and qe_task != 'scf':
+                gen_kpoints = generate_kpath(self.structure, 
+                                self.num_kpoints)
+                qe_task_grid = ['{:5d}\n'.format(len(gen_kpoints))]
+                qe_task_grid.extend(
+                        [' {:15.10f} {:15.10f} {:15.10f}   1.0\n'.format(
+                            k[0], k[1], k[2]) for k in gen_kpoints] )
+                qe_task_grid[-1] = qe_task_grid[-1].rstrip()
+            else:
+                qe_task_grid = qe_kgrids.generate_kgrid(qe_task)
         
             qe_task_control = qe_control.get(qe_task)
 
@@ -405,7 +420,7 @@ class QeMeanFieldTask(FireTaskBase):
             qe_task_pw.write_file('in')
 
             #Write input file for pw2bgw to convert to wave function to BGW format
-            if qe_task != 'scf': 
+            if qe_task != 'scf' and not self.alternate_kpoints: 
                 print 'qe_task = ', qe_task
                 qe_task_pw2bgw = qe_pw2bgw.get(qe_task)
                 #print 'qe_task_pw2bgw = ', qe_task_pw2bgw
@@ -453,7 +468,7 @@ class QeMeanFieldTask(FireTaskBase):
     def run_pw(self, pwx, dir_name, pw2bgwx=None):
         mpi_pw = list(self.mpi_cmd)
         mpi_pw.extend([pwx])
-        if pw2bgwx:
+        if pw2bgwx and not self.alternate_kpoints:
             mpi_pw2bgw = list(self.mpi_cmd)
             mpi_pw2bgw.extend([pw2bgwx])
             job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
@@ -461,6 +476,44 @@ class QeMeanFieldTask(FireTaskBase):
             job = PWJob(mpi_pw)
         c = Custodian(handlers=[], validators=[], jobs=[job])
         self.output[dir_name] = c.run()
+
+    def add_spec(self, key, val):
+        # To use nested dictionary entries, use "->"
+        # as the separator for nested dictionaries
+        # i.e. '_queueadapter->walltime' as the key 
+        # to set {'_queueadapter': {'walltime': 'val'}}
+        def get_nested_dict(input_dict, key):
+            current = input_dict
+            toks = key.split("->")
+            n = len(toks)
+            for i, tok in enumerate(toks):
+                if tok not in current and i < n - 1:
+                    current[tok] = {}
+                elif i == n - 1:
+                    return current, toks[-1]
+                current = current[tok]
+
+        def get_nested_dict2(input_dict, val):
+            current = input_dict
+            for k, v in val.items():
+                if isinstance(v, dict):
+                    if k not in current.keys():
+                        current[k] = {}
+                    current = current[k]
+                    get_nested_dict2(current, v)
+                else:
+                    current[k] = v            
+
+        if isinstance(val, dict):
+            if key not in self.Firework.spec:
+                self.Firework.spec[key] = {}
+            current = self.Firework.spec[key]
+            get_nested_dict2(current, val)            
+
+        else:
+            (d, k) = get_nested_dict(self.Firework.spec, key)
+            d[k] = val
+
 
 @explicit_serialize
 class BgwAbsTask(FireTaskBase):

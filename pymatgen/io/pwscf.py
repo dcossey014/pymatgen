@@ -18,6 +18,8 @@ __date__ = "3/27/15"
 
 import six
 
+from pymatgen import Structure
+from copy import deepcopy as dcopy
 from monty.re import regrep
 from collections import defaultdict
 
@@ -79,7 +81,7 @@ class PWInput(object):
             out.append("&%s" % k1.upper())
             sub = []
             for k2 in sorted(v1.keys()):
-                sub.append("  %s = %s" % (k2, to_str(v1[k2])))
+                sub.append("  %s = %s" % (k2, to_str(v1[k2])) )
             if k1 == "system":
                 sub.append("  ibrav = 0")
                 sub.append("  nat = %d" % len(self.structure))
@@ -118,6 +120,101 @@ class PWInput(object):
         """
         with open(filename, "w") as f:
             f.write(self.__str__()+"\n")
+
+    @classmethod
+    def from_file(cls, filename):
+        sections = {}
+        heading = 'none'
+        headers = ['ATOMIC_SPECIES', 'ATOMIC_POSITIONS', 'K_POINTS', 
+                   'CELL_PARAMETERS', 'CONSTRAINTS', 'OCCUPATIONS', 
+                   'ATOMIC_FORCES']
+        to_remove = ['ibrav', 'nat', 'ntyp']
+
+        def complete_subgroup(heading):
+            if 'ATOMIC_SPECIES' in heading:
+                global pseudo
+                atom_pseudo = dcopy(sub)
+                pseudo = {}
+                for ppf in atom_pseudo:
+                    pseudo[ppf[0]] = ppf[-1]
+            if 'ATOMIC_POSITIONS' in heading:
+                global species
+                global coords
+                atoms = dcopy(sub)
+                species = [a[0] for a in atoms]
+                coords = [[float(a[1]), float(a[2]), float(a[3])] for a in atoms]
+            if 'K_POINTS' in heading:
+                global kpoints
+                global kpoints_shift
+                kpt = dcopy(sub)
+                if kpoints_mode == 'crystal':
+                    kpoints = []
+                    kpoints.append(' {}\n'.format(kpt[0][0]))
+                    kpoints.extend(['  {:11}  {:11}  {:11}   {:4}\n'.format(
+                                     k[0], k[1], k[2], k[3]) for k in kpt[1:]] 
+                                  )
+                    kpoints_shift=None
+                elif kpoints_mode == 'automatic':
+                    kpoints = [int(k) for k in kpt[0]]
+                    kpoints_shift = [int(k) for k in kpt[1]]
+            
+
+            if 'CELL_PARAMETERS' in heading:
+                global lattice
+                cell = dcopy(sub)
+                lattice = [[float(v) for v in v1] for v1 in cell]
+            if 'CONSTRAINTS' in heading:
+                global constraints
+                constraints = dcopy(sub)
+
+        with open(filename, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            l = line.strip().replace("'", '').replace(',', '')
+            print("L: {}".format(l))
+            if '&' in l:
+                section = l[1:].lower()
+                sections[section] = {}
+                continue
+
+            l = l.split()
+            print("key: {}\t\tVal: {}".format(l[0], l[-1]))
+            print("{}".format(l[-1].lower()))
+            if l[0] in headers:
+                if 'K_POINTS' in l[0]:
+                    kpoints_mode = l[-1].strip()
+                if heading != 'none':
+                    complete_subgroup(heading) 
+                heading = l[0]
+                sub = []
+                continue
+
+            if heading != 'none':
+                sub.append([w for w in l])
+            elif 'true' in l[-1].lower():
+                print("under true heading\n\n")
+                sections[section][l[0]] = True
+            elif 'false' in l[-1].lower():
+                print("under false heading\n\n")
+                sections[section][l[0]] = False
+            elif l[0] != '/' and l[0] != 'pseudo_dir':
+                print("under non pseudo heading\n\n")
+                sections[section][l[0]] = (l[-1].replace("'",'').replace(',', '')) 
+            elif l[0] != '/':
+                print("under other heading\n\n")
+                sections[section][l[0]] = l[-1][1:-2]
+        complete_subgroup(heading)
+        sections['system'] = {k:v for k,v in sections['system'].items()
+                                if k not in to_remove}
+        
+        structure = Structure(lattice, species, coords)
+        return PWInput(structure, pseudo, control=sections['control'], 
+                        system=sections['system'], electrons=sections['electrons'], 
+                        ions=sections['ions'], cell=sections['cell'],
+                        kpoints_mode=kpoints_mode, kpoints_grid=kpoints, 
+                        kpoints_shift=kpoints_shift)
+
+
 
 
 class PWInputError(BaseException):
