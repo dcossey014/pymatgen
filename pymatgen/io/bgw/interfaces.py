@@ -50,7 +50,7 @@ class BgwFirework():
     
     def __init__(self, bgw_task, name="Bgw FW", bgw_cmd=None,
                 handlers=None, handler_params=None, ppx=None,
-                mpi_cmd='mpiexec_mpt -n ${BC_MPI_TASKS_ALLOC}', config_file=None,
+                mpi_cmd='mpiexec_mpt -n 36', config_file=None,
                 complex=False):
         #TODO: Fix BGW_cmd and handlers.  Correct OUT file configuration.
         self.name = name
