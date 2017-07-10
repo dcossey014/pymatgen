@@ -71,8 +71,25 @@ class PWInput(object):
         self.kpoints_shift = kpoints_shift
 
         # Get number of Bands needed for a good calculation
-        self.bands = math.ceil(1.2*sum(self.structure.atomic_numbers))
-        sections['system']['nbnd'] = int(self.bands)
+        self.bands = 0
+        composition = self.structure.composition.as_dict()
+        for element in self.psuedo.keys():
+            with open(self.psuedo[element]) as fin:
+                for line in fin:
+                    if "z_valence" in line:
+                        l = line.strip().split()
+                        z_val = float(l[-1][:-1])
+                        self.bands += ( 1.2 / 2 * z_val * composition[element] )
+                        break
+
+        #self.bands = math.ceil(1.2*sum(self.structure.atomic_numbers)/2)
+        if 'nbnd' in sections['system'].keys() and sections['system']['nbnd'] > self.bands:
+            pass
+        else:
+            print("Setting number of bands to: {}\n"
+                    "Number of bands was not given or was less "
+                    "than recommended number of bands".format(self.bands))
+            sections['system']['nbnd'] = int(self.bands)
 
     def __str__(self):
         out = []
