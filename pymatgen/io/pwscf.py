@@ -16,7 +16,7 @@ __email__ = "ongsp@ucsd.edu"
 __date__ = "3/27/15"
 
 
-import six
+import six, math
 
 from pymatgen import Structure
 from copy import deepcopy as dcopy
@@ -69,6 +69,27 @@ class PWInput(object):
         self.kpoints_mode = kpoints_mode
         self.kpoints_grid = kpoints_grid
         self.kpoints_shift = kpoints_shift
+
+        # Get number of Bands needed for a good calculation
+        self.bands = 0
+        composition = self.structure.composition.as_dict()
+        for element in self.psuedo.keys():
+            with open(self.psuedo[element]) as fin:
+                for line in fin:
+                    if "z_valence" in line:
+                        l = line.strip().split()
+                        z_val = float(l[-1][:-1])
+                        self.bands += ( 1.2 / 2 * z_val * composition[element] )
+                        break
+
+        #self.bands = math.ceil(1.2*sum(self.structure.atomic_numbers)/2)
+        if 'nbnd' in sections['system'].keys() and sections['system']['nbnd'] > self.bands:
+            pass
+        else:
+            print("Setting number of bands to: {}\n"
+                    "Number of bands was not given or was less "
+                    "than recommended number of bands".format(self.bands))
+            sections['system']['nbnd'] = int(self.bands)
 
     def __str__(self):
         out = []
@@ -130,6 +151,26 @@ class PWInput(object):
                    'ATOMIC_FORCES']
         to_remove = ['ibrav', 'nat', 'ntyp']
 
+        def parse_kv(k, v):
+            if 'true' in v.lower():
+                return (k, True)
+            elif 'false' in v.lower():
+                return (k, False)
+            try:
+                val = float(v)
+                if val.is_integer():
+                    return (k, int(val))
+                else:
+                    return (k, val)
+            except ValueError:
+                if v.find('True') != -1:
+                    return (k, True)
+                elif v.find('False') != -1:
+                    return (k, False)
+                else:
+                    return (k, v)
+            
+
         def complete_subgroup(heading):
             if 'ATOMIC_SPECIES' in heading:
                 global pseudo
@@ -149,8 +190,8 @@ class PWInput(object):
                 kpt = dcopy(sub)
                 if kpoints_mode == 'crystal':
                     kpoints = []
-                    kpoints.append(' {}\n'.format(kpt[0][0]))
-                    kpoints.extend(['  {:11}  {:11}  {:11}   {:4}\n'.format(
+                    kpoints.append('{:>5}\n'.format(kpt[0][0]))
+                    kpoints.extend(['  {:11}  {:11}  {:11}   {:3}\n'.format(
                                      k[0], k[1], k[2], k[3]) for k in kpt[1:]] 
                                   )
                     kpoints_shift=None
@@ -171,15 +212,15 @@ class PWInput(object):
             lines = f.readlines()
         for line in lines:
             l = line.strip().replace("'", '').replace(',', '')
-            print("L: {}".format(l))
+            #print("L: {}".format(l))
             if '&' in l:
                 section = l[1:].lower()
                 sections[section] = {}
                 continue
 
             l = l.split()
-            print("key: {}\t\tVal: {}".format(l[0], l[-1]))
-            print("{}".format(l[-1].lower()))
+            #print("key: {}\t\tVal: {}".format(l[0], l[-1]))
+            #print("{}".format(l[-1].lower()))
             if l[0] in headers:
                 if 'K_POINTS' in l[0]:
                     kpoints_mode = l[-1].strip()
@@ -191,7 +232,10 @@ class PWInput(object):
 
             if heading != 'none':
                 sub.append([w for w in l])
-            elif 'true' in l[-1].lower():
+            elif l[0] != '/':
+                k,v = parse_kv(l[0], l[-1].replace(',',''))
+                sections[section][k] = v
+            """elif 'true' in l[-1].lower():
                 print("under true heading\n\n")
                 sections[section][l[0]] = True
             elif 'false' in l[-1].lower():
@@ -202,7 +246,7 @@ class PWInput(object):
                 sections[section][l[0]] = (l[-1].replace("'",'').replace(',', '')) 
             elif l[0] != '/':
                 print("under other heading\n\n")
-                sections[section][l[0]] = l[-1][1:-2]
+                sections[section][l[0]] = l[-1][1:-2]"""
         complete_subgroup(heading)
         sections['system'] = {k:v for k,v in sections['system'].items()
                                 if k not in to_remove}
