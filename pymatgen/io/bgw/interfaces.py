@@ -415,7 +415,7 @@ class QeMeanFieldTask(FireTaskBase):
 
             # Get number of Bands needed for a good Calculation
             bands = 0
-	    composition = self.structure.composition.as_dict()
+    	    composition = self.structure.composition.as_dict()
             for element in self.pseudo.keys():
                 with open(os.path.join("{}/{}".format(
                     self.pseudo_dir,self.pseudo[element])) ) as fin:
@@ -428,11 +428,14 @@ class QeMeanFieldTask(FireTaskBase):
 
             bands = int(ceil(bands + 4)) if bands * 0.2 < 4 else int(ceil(bands * 1.2))
 
-            #self.bands = math.ceil(1.2*sum(self.structure.atomic_numbers)/2)
-            if 'nbnd' in qe_task_system.keys() and qe_task_system['nbnd'] < bands:
-                print("Setting number of bands to: {}\n"
-                        "Number of bands was not given or was less "
-                        "than recommended number of bands".format(bands))
+            # Check if nbnd is set and adjust if necessary
+            if 'nbnd' in qe_task_system.keys():
+                if qe_task_system['nbnd'] < bands:
+                    print("Setting number of bands to: {}\n"
+                            "Number of bands was set less "
+                            "than the recommended number of bands".format(bands))
+                    qe_task_system['nbnd'] = bands
+            else:
                 qe_task_system['nbnd'] = bands
 
             #Write Input file for specified QE PWSCF Mean field task
