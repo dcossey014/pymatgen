@@ -74,7 +74,7 @@ class PWInput(object):
         self.bands = 0
         composition = self.structure.composition.as_dict()
         for element in self.pseudo.keys():
-            with open(self.psuedo[element]) as fin:
+            with open(self.pseudo[element]) as fin:
                 for line in fin:
                     if "z_valence" in line:
                         l = line.strip().split()
