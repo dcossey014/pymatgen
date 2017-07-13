@@ -299,46 +299,28 @@ class BgwInputTask(FireTaskBase):
         allowed_vbands=[]
         allowed_cbands=[]
         print "check_degeneracy report for WFN"
-        line=p_wfn.stdout.readline()
-        while line:
-            sys.stdout.write('1{}'.format(line))
-            line=p_wfn.stdout.readline()
-            if "epsilon" in line:
-                line=p_wfn.stdout.readline()
-                while line:
-                    sys.stdout.write('1{}'.format(line))
-                    allowed_bands.append(int(line))
-                    line=p_wfn.stdout.readline()
-                    if line == '\n' or 'Note' in line:
-                        break
-                sys.stdout.write('1{}'.format(line))
-                break
-        while line:
-            line=p_wfn.stdout.readline()
-            sys.stdout.write('2{}'.format(line))
-            if "valence" in line:
-                line=p_wfn.stdout.readline()
-                while line:
-                    sys.stdout.write('2{}'.format(line))
-                    allowed_vbands.append(int(line))
-                    line=p_wfn.stdout.readline()
-                    if line == '\n':
-                        break
-                sys.stdout.write('2{}'.format(line))
-                break
-        while line:
-            line=p_wfn.stdout.readline()
-            sys.stdout.write('3{}'.format(line))
-            if "conduction" in line:
-                line=p_wfn.stdout.readline()
-                while line:
-                    sys.stdout.write('3{}'.format(line))
-                    allowed_cbands.append(int(line))
-                    line=p_wfn.stdout.readline()
-                    if line == '\n' or 'Note' in line:
-                        break
-                sys.stdout.write('3{}'.format(line))
-                break
+        lines = p_wfn.stdout.readlines()
+        alist = ['buff']
+        for line in lines:
+            l = line
+            print(l)
+            if "epsilon" in l:
+                alist = allowed_bands
+            if "valence" in l:
+                alist = allowed_vbands
+            if "conduction" in l:
+                alist = allowed_cbands
+
+            try:
+                if "Note" not in l and l != '\n':
+                    alist.append(int(l))
+                elif "Note" in l:
+                    l = l.split()
+                    alist.append(int(l[-3]) - 1)
+                    alist = ['buff']
+            except:
+                pass
+            
         print "    allowed bands=",allowed_bands
         print "    allowed valence bands=",allowed_vbands
         print "    allowed conduction bands=",allowed_cbands
