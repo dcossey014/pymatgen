@@ -73,7 +73,7 @@ class PWInput(object):
         # Get number of Bands needed for a good calculation
         self.bands = 0
         composition = self.structure.composition.as_dict()
-        for element in self.psuedo.keys():
+        for element in self.pseudo.keys():
             with open(self.psuedo[element]) as fin:
                 for line in fin:
                     if "z_valence" in line:
