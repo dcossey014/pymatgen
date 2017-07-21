@@ -1,6 +1,7 @@
 import os
 import glob
 import shutil
+from math import ceil
 
 import subprocess
 from pymatgen.io.bgw.kgrid import generate_kpath
@@ -411,6 +412,31 @@ class QeMeanFieldTask(FireTaskBase):
 
             qe_task_system  = qe_system.get(qe_task)
             qe_task_electrons = qe_electrons.get(qe_task)
+
+            # Get number of Bands needed for a good Calculation
+            bands = 0
+    	    composition = self.structure.composition.as_dict()
+            for element in self.pseudo.keys():
+                with open(os.path.join("{}/{}".format(
+                    self.pseudo_dir,self.pseudo[element])) ) as fin:
+                    for line in fin:
+                        if "z_valence" in line:
+                            l = line.strip().split()
+                            z_val = float(l[-1][:-1])
+                            bands += (z_val / 2) * composition[element]
+                            break
+
+            bands = int(ceil(bands + 4)) if bands * 0.2 < 4 else int(ceil(bands * 1.2))
+
+            # Check if nbnd is set and adjust if necessary
+            if 'nbnd' in qe_task_system.keys():
+                if qe_task_system['nbnd'] < bands:
+                    print("Setting number of bands to: {}\n"
+                            "Number of bands was set less "
+                            "than the recommended number of bands".format(bands))
+                    qe_task_system['nbnd'] = bands
+            else:
+                qe_task_system['nbnd'] = bands
 
             #Write Input file for specified QE PWSCF Mean field task
             qe_task_pw = PWInput(self.structure, control=qe_task_control,

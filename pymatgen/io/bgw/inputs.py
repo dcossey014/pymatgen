@@ -7,11 +7,9 @@ __date__ = "2016-04-28"
 
 import six, glob, sys, errno
 import os, abc
-import mmap
-import fnmatch
-import re
+import mmap, fnmatch, re, subprocess
 import copy as cp
-import subprocess
+from bisect import bisect_left
 
 from pymatgen.io.bgw.kgrid import generate_kpath
 
@@ -236,7 +234,7 @@ class BgwInputTask(FireTaskBase):
             force_link(os.path.join(wfnq, wfn_file),
                     './WFNq')
 
-            self.check_degeneracy('./WFN')
+            self.check_degeneracy(['./WFN', './WFNq'])
 
         if 'sigma' in fout:
             wfn_co = self.qe_dirs['wfn_co']
@@ -248,14 +246,14 @@ class BgwInputTask(FireTaskBase):
             force_link(os.path.join(wfn_co, wfn_file), 
                     './WFN_inner')
             extra_links('eps')
-            self.check_degeneracy('./WFN_inner')
+            self.check_degeneracy(['./WFN_inner'])
 
         if 'kernel' in fout:
             wfn_co = self.qe_dirs['wfn_co']
             force_link(os.path.join(wfn_co, wfn_file),
                     './WFN_co')
             extra_links('eps')
-            self.check_degeneracy('./WFN_co')
+            self.check_degeneracy(['./WFN_co'])
 
         if 'absorp' in fout:
             wfn_co = self.qe_dirs['wfn_co']
@@ -272,73 +270,53 @@ class BgwInputTask(FireTaskBase):
                     './eqp_co.dat')
             extra_links('eps')
             extra_links('bse')
-            self.check_degeneracy('./WFN_co')
-            self.check_degeneracy('./WFN_fi')
-            self.check_degeneracy('./WFNq_fi')
+            self.check_degeneracy(['./WFN_co', './WFN_fi', './WFNq_fi'])
 
-    def check_degeneracy(self, wfn_file):
+    def check_degeneracy(self, wfn_file, degen_exec='degeneracy_check.x'):
         config_file=self.config_file
         if config_file:
             config_dict = loadfn(config_file)
-            de_check_exec = os.path.join(config_dict['BGW_DIR'], 'degeneracy_check.x')
+            de_check_exec = [os.path.join(config_dict['BGW_DIR'], 'degeneracy_check.x')]
         elif os.path.exists(os.path.join(os.environ['HOME'],
                                         'bgw_interface_defaults.yaml')):
             config_dict = loadfn(os.path.join(os.environ['HOME'],
                                         'bgw_interface_defaults.yaml'))
-            de_check_exec = os.path.join(config_dict['BGW_DIR'], 'degeneracy_check.x')
+            de_check_exec = [os.path.join(config_dict['BGW_DIR'], 'degeneracy_check.x')]
         else:
             config_dict = {}
+            de_check_exec = [degen_exec]
 
         print "Checking degeneracy using", de_check_exec
         print "Checking wave function file", wfn_file
 
-        p_wfn=subprocess.Popen([de_check_exec,wfn_file],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        de_check_exec.extend(wfn_file)
+        p_wfn=subprocess.Popen(de_check_exec,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         p_wfn.wait()
 
-        allowed_bands=[]
-        allowed_vbands=[]
-        allowed_cbands=[]
+        allowed_bands, allowed_vbands, allowed_cbands = [], [], []
         print "check_degeneracy report for WFN"
-        line=p_wfn.stdout.readline()
-        while line:
-            sys.stdout.write('1{}'.format(line))
-            line=p_wfn.stdout.readline()
-            if "epsilon" in line:
-                line=p_wfn.stdout.readline()
-                while line:
-                    sys.stdout.write('1{}'.format(line))
-                    allowed_bands.append(int(line))
-                    line=p_wfn.stdout.readline()
-                    if line == '\n' or 'Note' in line:
-                        break
-                sys.stdout.write('1{}'.format(line))
-                break
-        while line:
-            line=p_wfn.stdout.readline()
-            sys.stdout.write('2{}'.format(line))
-            if "valence" in line:
-                line=p_wfn.stdout.readline()
-                while line:
-                    sys.stdout.write('2{}'.format(line))
-                    allowed_vbands.append(int(line))
-                    line=p_wfn.stdout.readline()
-                    if line == '\n':
-                        break
-                sys.stdout.write('2{}'.format(line))
-                break
-        while line:
-            line=p_wfn.stdout.readline()
-            sys.stdout.write('3{}'.format(line))
-            if "conduction" in line:
-                line=p_wfn.stdout.readline()
-                while line:
-                    sys.stdout.write('3{}'.format(line))
-                    allowed_cbands.append(int(line))
-                    line=p_wfn.stdout.readline()
-                    if line == '\n' or 'Note' in line:
-                        break
-                sys.stdout.write('3{}'.format(line))
-                break
+        lines = p_wfn.stdout.readlines()
+        alist = ['buff']
+        for line in lines:
+            l = line
+            print(l)
+            if "epsilon" in l:
+                alist = allowed_bands
+            if "valence" in l:
+                alist = allowed_vbands
+            if "conduction" in l:
+                alist = allowed_cbands
+
+            try:
+                if "Note" not in l and l != '\n':
+                    alist.append(int(l))
+                elif "Note" in l:
+                    l = l.split()
+                    alist.append(int(l[-3]) - 1)
+                    alist = ['buff']
+            except:
+                pass
+            
         print "    allowed bands=",allowed_bands
         print "    allowed valence bands=",allowed_vbands
         print "    allowed conduction bands=",allowed_cbands
@@ -347,6 +325,18 @@ class BgwInputTask(FireTaskBase):
             # based on the user specified band number and allowed bands from check_degneracy,
             # match_bands selects the closest degeneracy allowed band number. If there is a 
             # tie, then the larger of the two allowed band numbers will be selected.
+            '''
+            npos = bisect_left(allowed, user_spec)
+            if npos == 0:
+                return allowed[0]
+            if npos == len(allowed):
+                return allowed[-1]
+            before = allowed[npos -1]
+            after = allowed[npos]
+            if after - user_spec > user_spec - before:
+                return before
+            else:
+                return after '''
             matched_band_index=0
             matched_band_diff=9999
             matched_band_sign=0

@@ -70,11 +70,12 @@ class PWInput(object):
         self.kpoints_grid = kpoints_grid
         self.kpoints_shift = kpoints_shift
 
+        '''
         # Get number of Bands needed for a good calculation
         self.bands = 0
         composition = self.structure.composition.as_dict()
-        for element in self.psuedo.keys():
-            with open(self.psuedo[element]) as fin:
+        for element in self.pseudo.keys():
+            with open(self.pseudo[element]) as fin:
                 for line in fin:
                     if "z_valence" in line:
                         l = line.strip().split()
@@ -90,6 +91,7 @@ class PWInput(object):
                     "Number of bands was not given or was less "
                     "than recommended number of bands".format(self.bands))
             sections['system']['nbnd'] = int(self.bands)
+        '''
 
     def __str__(self):
         out = []
