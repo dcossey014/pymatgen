@@ -19,15 +19,17 @@ print s_prim.__repr__()
 # get rid of spaces for pwscf and pw2bgw file prefixes
 formula_prefix=s_prim.formula.replace(' ','')
 
-kpts = [8,8,8]
+# user input
+kpts = [6,6,6]
+kpts_fi= [8,8,8]
 
 kpoints = {}
 kpoints['scf'] = kpts
 kpoints['wfn'] = kpts
-kpoints['wfn_co'] = [8,8,8]
-kpoints['wfn_fi'] = [12,12,12]
+kpoints['wfn_co'] = kpts
+kpoints['wfn_fi'] = kpts_fi
 kpoints['wfnq'] = kpts
-kpoints['wfnq_fi'] = [12,12,12]
+kpoints['wfnq_fi'] = kpts_fi
 
 qshift=[0.0, 0.0, 0.001]
 fftw_grid = [24,24,24]

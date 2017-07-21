@@ -53,7 +53,6 @@ wfn_control={"calculation" : "bands",
 
 qemft_control={}
 
-qemft_control={}
 qemft_control['scf']=scf_control
 
 for i in ['wfn']:
