@@ -313,7 +313,7 @@ class BgwInputTask(FireTaskBase):
                     alist.append(int(l))
                 elif "Note" in l:
                     l = l.split()
-                    alist.append(int(l[-3]) - 1)
+                    #alist.append(int(l[-3]) - 1)
                     alist = ['buff']
             except:
                 pass
