@@ -234,7 +234,7 @@ class BgwInputTask(FireTaskBase):
             force_link(os.path.join(wfnq, wfn_file),
                     './WFNq')
 
-            self.check_degeneracy(['./WFN', './WFNq'])
+            self.check_degeneracy(['./WFN'])
 
         if 'sigma' in fout:
             wfn_co = self.qe_dirs['wfn_co']
@@ -270,7 +270,9 @@ class BgwInputTask(FireTaskBase):
                     './eqp_co.dat')
             extra_links('eps')
             extra_links('bse')
-            self.check_degeneracy(['./WFN_co', './WFN_fi', './WFNq_fi'])
+            self.check_degeneracy(['./WFN_fi'])
+            self.check_degeneracy(['./WFNq_fi'])
+            self.check_degeneracy(['./WFN_co'])
 
     def check_degeneracy(self, wfn_file, degen_exec='degeneracy_check.x'):
         config_file=self.config_file
@@ -308,14 +310,11 @@ class BgwInputTask(FireTaskBase):
                 alist = allowed_cbands
 
             try:
-                #gk this isn't working.
-                #if "Note" not in l and l != '\n':
-                #    alist.append(int(l))
-                #elif "Note" in l:
-                #    l = l.split()
-                #    alist.append(int(l[-3]) - 1)
-                #    alist = ['buff']
-                alist.append(int(l))
+                if "Note" not in l and l != '\n':
+                    alist.append(int(l))
+                elif "Note" in l:
+                    l = l.split()
+                    alist = ['buff']
             except:
                 pass
             
@@ -327,7 +326,6 @@ class BgwInputTask(FireTaskBase):
             # based on the user specified band number and allowed bands from check_degneracy,
             # match_bands selects the closest degeneracy allowed band number. If there is a 
             # tie, then the larger of the two allowed band numbers will be selected.
-            '''
             npos = bisect_left(allowed, user_spec)
             if npos == 0:
                 return allowed[0]
@@ -338,7 +336,10 @@ class BgwInputTask(FireTaskBase):
             if after - user_spec > user_spec - before:
                 return before
             else:
-                return after '''
+                return after 
+
+            # Old Code
+            '''
             matched_band_index=0
             matched_band_diff=9999
             matched_band_sign=0
@@ -356,6 +357,7 @@ class BgwInputTask(FireTaskBase):
                         matched_band_sign=sign
                         matched_band_index=band_index
             return matched_band_index
+            '''
 
         if not self.occupied_bands:
             self.occupied_bands = allowed_vbands[-1]
@@ -390,16 +392,16 @@ class BgwInputTask(FireTaskBase):
         if 'kernel' in self.filename:
             user_vband = self.isp.get('number_val_bands', None)
             print("user_vband: {}".format(user_vband))
-            self.isp['number_val_bands'] = allowed_vbands[-1] if not user_vband else match_bands(
-                    user_vband, allowed_vbands)
+            self.isp['number_val_bands'] = (allowed_vbands[-1] if not \
+                    user_vband else match_bands(user_vband, allowed_vbands) )
             print("self.isp['number_val_bands']: {}".format(self.isp['number_val_bands']))
 
             user_cband = self.isp.get('number_cond_bands', None)
-            self.isp['number_cond_bands'] = allowed_cbands[-1] if not user_cband else match_bands(
-                    user_cband, allowed_cbands)
+            self.isp['number_cond_bands'] = (allowed_cbands[-1] if not \
+                    user_cband else match_bands(user_cband, allowed_cbands) )
 
         if 'absorption' in self.filename:
-            if 'co' in wfn_file:
+            if 'co' in wfn_file[0]:
                 user_vband = self.isp.get('number_val_bands_coarse', None)
                 self.isp['number_val_bands_coarse'] = ( allowed_vbands[-1] if not \
                         user_vband else match_bands(user_vband, allowed_vbands))
@@ -408,15 +410,16 @@ class BgwInputTask(FireTaskBase):
                 self.isp['number_cond_bands_coarse'] = ( allowed_cbands[-1] if not \
                         user_cband else match_bands(user_cband, allowed_cbands))
 
-            if 'fi' in wfn_file and not 'q' in wfn_file:
+            if 'fi' in wfn_file[0] and not 'q' in wfn_fi[0]:
                 user_cband = self.isp.get('number_cond_bands_fine', None)
-                self.isp['number_cond_bands_fine'] = allowed_cbands[-1] if not user_cband else match_bands(
-                        user_cband, allowed_cbands)
+                self.isp['number_cond_bands_fine'] = allowed_cbands[-1] if not \
+                        user_cband else match_bands(user_cband, allowed_cbands)
 
-            if 'q_fi' in wfn_file:
+            if 'q_fi' in wfn_file[0]:
                 user_vband = self.isp.get('number_val_bands_fine', None)
                 self.isp['number_val_bands_fine'] = ( allowed_vbands[-1] if not \
                         user_vband else match_bands(user_vband, allowed_vbands))
+
         print("finished with dep_setup")
         
         
