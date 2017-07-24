@@ -234,7 +234,7 @@ class BgwInputTask(FireTaskBase):
             force_link(os.path.join(wfnq, wfn_file),
                     './WFNq')
 
-            self.check_degeneracy(['./WFN', './WFNq'])
+            self.check_degeneracy(['./WFN'])
 
         if 'sigma' in fout:
             wfn_co = self.qe_dirs['wfn_co']
@@ -270,7 +270,8 @@ class BgwInputTask(FireTaskBase):
                     './eqp_co.dat')
             extra_links('eps')
             extra_links('bse')
-            self.check_degeneracy(['./WFN_fi', './WFNq_fi'])
+            self.check_degeneracy(['./WFN_fi'])
+            self.check_degeneracy(['./WFNq_fi'])
             self.check_degeneracy(['./WFN_co'])
 
     def check_degeneracy(self, wfn_file, degen_exec='degeneracy_check.x'):
@@ -313,7 +314,6 @@ class BgwInputTask(FireTaskBase):
                     alist.append(int(l))
                 elif "Note" in l:
                     l = l.split()
-                    #alist.append(int(l[-3]) - 1)
                     alist = ['buff']
             except:
                 pass
@@ -410,11 +410,12 @@ class BgwInputTask(FireTaskBase):
                 self.isp['number_cond_bands_coarse'] = ( allowed_cbands[-1] if not \
                         user_cband else match_bands(user_cband, allowed_cbands))
 
-            if 'fi' in wfn_file[0]:
+            if 'fi' in wfn_file[0] and not 'q' in wfn_fi[0]:
                 user_cband = self.isp.get('number_cond_bands_fine', None)
                 self.isp['number_cond_bands_fine'] = allowed_cbands[-1] if not \
                         user_cband else match_bands(user_cband, allowed_cbands)
 
+            if 'q_fi' in wfn_file[0]:
                 user_vband = self.isp.get('number_val_bands_fine', None)
                 self.isp['number_val_bands_fine'] = ( allowed_vbands[-1] if not \
                         user_vband else match_bands(user_vband, allowed_vbands))
