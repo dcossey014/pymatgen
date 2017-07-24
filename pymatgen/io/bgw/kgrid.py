@@ -135,10 +135,10 @@ class QeMeanFieldGrids(object):
         if 'wfn_co' not in self.kpoints.keys():
             self.kpoints['wfn_co'] = ( [ i for i in \
                         self.kpoints['wfn'] ] )
-        elif self.kpoints['wfn_co'] != self.kpoints['wfn']:
+        '''elif self.kpoints['wfn_co'] != self.kpoints['wfn']:
             print("WFN_co and WFN kpoints must be equal")
             print("Resetting WFN_co kpoints to WFN kpoints")
-            self.kpoints['wfn_co'] = [ i for i in self.kpoints['wfn'] ]
+            self.kpoints['wfn_co'] = [ i for i in self.kpoints['wfn'] ]'''
 
         if 'wfn_fi' not in self.kpoints.keys(): 
             self.kpoints['wfn_fi'] = ( [ int(i*2) for i in \

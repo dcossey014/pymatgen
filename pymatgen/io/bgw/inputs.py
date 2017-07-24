@@ -308,12 +308,14 @@ class BgwInputTask(FireTaskBase):
                 alist = allowed_cbands
 
             try:
-                if "Note" not in l and l != '\n':
-                    alist.append(int(l))
-                elif "Note" in l:
-                    l = l.split()
-                    alist.append(int(l[-3]) - 1)
-                    alist = ['buff']
+                #gk this isn't working.
+                #if "Note" not in l and l != '\n':
+                #    alist.append(int(l))
+                #elif "Note" in l:
+                #    l = l.split()
+                #    alist.append(int(l[-3]) - 1)
+                #    alist = ['buff']
+                alist.append(int(l))
             except:
                 pass
             
