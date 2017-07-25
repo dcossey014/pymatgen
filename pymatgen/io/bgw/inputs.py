@@ -410,7 +410,7 @@ class BgwInputTask(FireTaskBase):
                 self.isp['number_cond_bands_coarse'] = ( allowed_cbands[-1] if not \
                         user_cband else match_bands(user_cband, allowed_cbands))
 
-            if 'fi' in wfn_file[0] and not 'q' in wfn_fi[0]:
+            if 'fi' in wfn_file[0] and not 'q' in wfn_file[0]:
                 user_cband = self.isp.get('number_cond_bands_fine', None)
                 self.isp['number_cond_bands_fine'] = allowed_cbands[-1] if not \
                         user_cband else match_bands(user_cband, allowed_cbands)
