@@ -199,6 +199,9 @@ class BgwWorkflow():
                             sequentially dependent.
 
         -name (str):        Name to be to the Workflow
+        -db_upload (bool)   Choose whether or not to upload Successfully completed
+                            runs directly to db using bgw_db.yaml defaults file 
+                            from HOME Directory
 
     Example:
         BgwWorkflow(FW1, FW2, FW3, FW4, deps_dict={FW1: [FW2, FW3], 
@@ -225,6 +228,7 @@ class BgwWorkflow():
         self.fws = []
         self.name = kwargs.get('name', 'Sequential WF')
         self.deps_dict = kwargs.get('deps_dict', {}) 
+        self.db_upload = kwargs.get('db_upload', False)
         self.dependency = {}
         if self.deps_dict:
             for i in self.deps_dict.keys():
@@ -243,9 +247,10 @@ class BgwWorkflow():
             if not self.deps and id != 0:
                     self.dependency[self.fws[id-1]]=( [fw_task] if isinstance(fw_task,
                                         Firework) else [fw_task.Firework] )
-        #db_fw = Firework(BgwDB(config_file='bgw_db.yaml', insert_to_db=True), name="BGW DB Task")
-        #self.fws.append(db_fw)
-        #self.dependency[self.fws[id]] = [db_fw]
+        if self.db_upload:
+            db_fw = Firework(BgwDB(config_file='bgw_db.yaml', insert_to_db=True), name="BGW DB Task")
+            self.fws.append(db_fw)
+            self.dependency[self.fws[id]] = [db_fw]
         self.wf = Workflow(self.fws, self.dependency, name=self.name)
 
         # Try to establish connection with Launchpad
