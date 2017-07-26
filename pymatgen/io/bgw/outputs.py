@@ -180,7 +180,7 @@ class EspressoRun(MSONable):
         return self.structure.lattice.reciprocal_lattice
         
     def as_dict(self):
-        d = {'structure': self.structure,
+        d = {'structure': self.structure.as_dict(),
              'data_file': self.data,
              'band_data': {'kpoints': self.kpoints,
                  'eigenvalues': self.band_data}
@@ -316,10 +316,10 @@ class EspressoRun(MSONable):
 
 
 class BgwRun(MSONable):
-    def __init__(self, filename):
-        self.filename = filename
-        out_files = []
-        with zopen(filename, 'rt') as f:
+    def __init__(self, dir_name):
+        self.dirname = dir_name
+        self.output_filename = self._find_outputs(self.dirname)
+        with zopen(self.output_filename, 'rt') as f:
             self._parse(f)
 
 
@@ -349,12 +349,12 @@ class BgwRun(MSONable):
 
             self.absorption = {}
             if "Absorption" in self.runtype: 
-                abs_dir = os.path.dirname(os.path.abspath(self.filename))
-                if 'absorption_eh.dat' in os.listdir(abs_dir):
-                    self._parse_absorption(os.path.join(abs_dir,
+                self.dirname = os.path.dirname(os.path.abspath(self.output_filename))
+                if 'absorption_eh.dat' in os.listdir(self.dirname):
+                    self._parse_absorption(os.path.join(self.dirname,
                         'absorption_eh.dat'))
-                if 'absorption_noeh.dat' in os.listdir(abs_dir):
-                    self._parse_absorption(os.path.join(abs_dir,
+                if 'absorption_noeh.dat' in os.listdir(self.dirname):
+                    self._parse_absorption(os.path.join(self.dirname,
                         'absorption_noeh.dat'))
 
     def _parse_memory(self, stream):
@@ -467,7 +467,7 @@ class BgwRun(MSONable):
                 'Complex/Real': self.cmplx_real}
         d['Memory Usage'] = {'Required Memory': self.mem_req,
                             'Available Memory': self.mem_avail}
-        d['Runtimes'] = self.timings
+        d['Timings'] = self.timings
         d['Band Info'] = {'Highest Occupied Band': self.occ_band_max,
                 'Max Valence Band': self.val_max_nrg,
                 'Min Conduction Band': self.cond_min_nrg,
@@ -480,6 +480,20 @@ class BgwRun(MSONable):
             d['Dielectric Functions'] = self.absorption
                
         return {self.runtype: d}
+
+    def _find_outputs(self, dirname):
+        out_files = glob.glob(os.path.join(dirname, "OUT.*"))
+
+        if len(out_files) == 1:
+            return out_files[0]
+        else:
+            raise BgwParserError(
+                    "Found {} output files for this directory: {}".format(
+                        len(out_files), dirname),
+                    {'err': 'Too few/many Output Files', 
+                    'directory': dirname} )
+        
+
 
 
 class QeBgwRun(MSONable):

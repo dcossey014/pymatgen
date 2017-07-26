@@ -26,7 +26,7 @@ from pymongo import MongoClient
 
 from pymatgen import Structure
 from pymatgen.io.pwscf import PWInput, PWInputError, PWOutput
-from pymatgen.io.bgw.outputs import BgwRun, EspressoRun
+from pymatgen.io.bgw.outputs import BgwRun, EspressoRun, BgwParserError
 from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, Workflow, LaunchPad
 from custodian.custodian import Job, Custodian
 
@@ -172,20 +172,20 @@ class BgwDB(FireTaskBase):
         self.prev_dirs = fw_spec.get("PREV_DIRS", None)
         self.esp_dir = os.path.dirname(self.prev_dirs.get("ESPRESSO", {}).get("scf", None))
         self.bgw_dirs = self.prev_dirs.get("BGW", {})
-        self.abs_dir = self.bgw_dirs.get("absorption", None)
 
+        if self.esp_dir:
+            self.esp_data = EspressoRun(self.esp_dir)
+        if self.bgw_dirs:
+            for i in self.bgw_dirs:
+                setattr(self, i, BgwRun(self.bgw_dirs[i]))
 
-        if self.abs_dir:
-            bgw_data,esp_data = self.get_dict(self.esp_dir, self.bgw_dirs)
-            run_data = {}
-            run_data['BGW'] = bgw_data
-            run_data['ESPRESSO'] = esp_data
-
-            if self.upload:
-                self.insert_db(run_data)
-            else:
-                pp = pprint.PrettyPrinter(indent=2)
-                pp.pprint(run_data)
+        # Upload to MongoDB or return a PrettyPrint Dictionary
+        if self.upload:
+            self.insert_db(self.as_dict())
+        else:
+            #pp = pprint.PrettyPrinter(indent=2)
+            #pp.pprint(self.as_dict())
+            pass
 
 
     def get_dict(self, esp_dir, bgw_dirs):
@@ -230,6 +230,19 @@ class BgwDB(FireTaskBase):
 
         collection = db[self.collection]
         collection.insert_one(run_data)
+
+    def as_dict(self):
+        esp_run = self.esp_data.as_dict()
+        d = {
+            'Structure': esp_run['structure'],
+            'ESPRESSO': esp_run,
+            'BGW': {}
+            }
+
+        for i in self.bgw_dirs:
+            bgw_run = getattr(self, i)
+            d['BGW'][i] = bgw_run.as_dict()
+        return d
 
 
 @explicit_serialize
