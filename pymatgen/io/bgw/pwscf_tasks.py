@@ -181,13 +181,13 @@ class BgwDB(FireTaskBase):
 
         # Upload to MongoDB or return a PrettyPrint Dictionary
         if self.upload:
-            self.insert_db(self.as_dict())
+            self.insert_db(self.get_dict())
         else:
             #pp = pprint.PrettyPrinter(indent=2)
-            #pp.pprint(self.as_dict())
+            #pp.pprint(self.get_dict())
             pass
 
-
+    '''
     def get_dict(self, esp_dir, bgw_dirs):
         esp_data = EspressoRun(esp_dir)
         d = {}
@@ -217,7 +217,7 @@ class BgwDB(FireTaskBase):
                         {'err': 'Incomplete Run'} )
         
         return (d, esp_data.as_dict())
-
+    '''
 
     def insert_db(self, run_data):
         connection = MongoClient(self.db_config['host'], self.db_config['port'],
@@ -231,7 +231,7 @@ class BgwDB(FireTaskBase):
         collection = db[self.collection]
         collection.insert_one(run_data)
 
-    def as_dict(self):
+    def get_dict(self):
         esp_run = self.esp_data.as_dict()
         d = {
             'Structure': esp_run['structure'],
