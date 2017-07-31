@@ -345,17 +345,20 @@ class BgwRun(MSONable):
                 self.num_bands = int(line.split()[-1])
 
             if "Sigma" in self.runtype and "Symmetrized values" in line:
-                self._parse_sigma_band_avg(i, self.num_bands, lines) 
+                    self._parse_sigma_band_avg(i, self.num_bands, lines) 
 
-            self.absorption = {}
-            if "Absorption" in self.runtype: 
-                self.dirname = os.path.dirname(os.path.abspath(self.output_filename))
-                if 'absorption_eh.dat' in os.listdir(self.dirname):
-                    self._parse_absorption(os.path.join(self.dirname,
-                        'absorption_eh.dat'))
-                if 'absorption_noeh.dat' in os.listdir(self.dirname):
-                    self._parse_absorption(os.path.join(self.dirname,
-                        'absorption_noeh.dat'))
+        if "Sigma" in self.runtype:
+            self._parse_ch_convergence() 
+
+        self.absorption = {}
+        if "Absorption" in self.runtype: 
+            self.dirname = os.path.dirname(os.path.abspath(self.output_filename))
+            if 'absorption_eh.dat' in os.listdir(self.dirname):
+                self._parse_absorption(os.path.join(self.dirname,
+                    'absorption_eh.dat'))
+            if 'absorption_noeh.dat' in os.listdir(self.dirname):
+                self._parse_absorption(os.path.join(self.dirname,
+                    'absorption_noeh.dat'))
 
     def _parse_memory(self, stream):
         l = stream.strip()
@@ -475,11 +478,51 @@ class BgwRun(MSONable):
                 'Units': self.val_units}
         if "Sigma" in self.runtype:
             d['Sigma Band Avgs'] = self.band_data
+            d['CH Convergence'] = self.ch_convergence
 
         if "Absorption" in self.runtype:
             d['Dielectric Functions'] = self.absorption
                
         return {self.runtype: d}
+
+
+    def _parse_ch_convergence(self):
+        i = 1
+        self.ch_convergence, d = {}, {}
+
+        with open('ch_converge.dat') as fin:
+            for line in fin.readlines():
+                l = line.strip().split()
+                if "# k =" in line:
+                    if i != 1:
+                        # Update ch_convergence attribute with previous 
+                        # K-point data
+                        d[name]['DATA'] = data
+                        self.ch_convergence.update(d)
+
+                    # Reset Dictionary for new K-point
+                    d = {}
+                    name = "k-point_{}".format(i)
+                    d[name] = {}
+                    d[name]['K-POINT'] = ' '.join(l[-5:-2])
+                    d[name]['UNITS'] = 'eV'
+
+                    # Reset Data List for new K-point
+                    data = []
+
+                    # Increment i for new K-point
+                    i += 1
+
+                elif "nbands" in line:
+                    d[name]['KEY'] = l[1:]
+
+                elif "#" not in line:
+                    data.append(l)
+
+            # Input last k-point into ch_convergence
+            d[name]['DATA'] = data
+            self.ch_convergence.update(d)
+
 
     def _find_outputs(self, dirname):
         out_files = glob.glob(os.path.join(dirname, "OUT.*"))

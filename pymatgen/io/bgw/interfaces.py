@@ -255,7 +255,8 @@ class BgwWorkflow():
 
         # Try to establish connection with Launchpad
         try:
-            self.LaunchPad=LaunchPad.from_file(os.path.join(os.environ["HOME"],".fireworks", "my_launchpad.yaml"))
+            self.LaunchPad=LaunchPad.from_file(os.path.join(
+                os.environ["HOME"],".fireworks", "my_launchpad.yaml"))
         except:
             self.LaunchPad = None
 
