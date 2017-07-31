@@ -692,7 +692,9 @@ class BgwInput(BgwInputTask):
             if key not in ignore_list:
                 print("\nKey: '{}' not found in valid parameters. ".format(key)+
                         "Setting Key/Val pair as class attribute.")
-            self.__dict__.update({key: val})
+                self.__dict__.update({key: val})
+            else:
+                isp_dict.update({key,val})
         else:
             if key_dict == 'int':
                 try:
@@ -761,7 +763,7 @@ class BgwInput(BgwInputTask):
 
         params = {'pseudo_dir': '', 'isp': isp_params, 
                 'kps': kps, 'occupied_bands': occupied_bands, 
-                'filename': filename}
+                'filename': "{}.inp".format(run_type)}
 
         return BgwInput('', **params)
 

@@ -57,7 +57,8 @@ class BgwFirework():
         self.name = name
         self.handlers=handlers if handlers else []
         self.handler_params=handler_params if handler_params else {}
-        self.out_file = "OUT.{}".format(bgw_task.params['out_file'][:3])
+        runtype = bgw_task.params['out_file'].split('/')[-1].split('.')[0]
+        self.out_file = "OUT.{}".format(runtype[:3])
         self.mpi_cmd = mpi_cmd
         self.bgw_cmd = bgw_cmd
         self.ppx = ppx 
