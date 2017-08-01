@@ -253,6 +253,7 @@ class BgwWorkflow():
             self.fws.append(db_fw)
             self.dependency[self.fws[id]] = [db_fw]
         self.wf = Workflow(self.fws, self.dependency, name=self.name)
+        print("beginning deps: {}".format(self.dependency))
 
         # Try to establish connection with Launchpad
         try:
@@ -264,12 +265,20 @@ class BgwWorkflow():
     def add_fw(self, fw_task, deps=None):
         self.fws.append(fw_task) if isinstance(fw_task,
                 Firework) else self.fws.append(fw_task.Firework)
+        print("dependency: {}".format(self.dependency))
+        #print("deps from function: {}".format(deps))
         if deps:
             for i in deps.keys():
-                fw_deps = []
-                for j in deps[i]:
-                    fw_deps.append(j.Firework)
-                self.dependency[i]=fw_deps
+                fw_deps = [j if isinstance(j, Firework) else j.Firework for j in deps[i]]
+                
+                if not isinstance(i, Firework):
+                    i = i.Firework
+   
+                if i in self.dependency.keys():
+                    self.dependency[i].extend(fw_deps)
+                else:
+                    self.dependency[i]=fw_deps
+    
         else:
             id = len(self.fws) - 2
             self.dependency[self.fws[id]]=[fw_task.Firework]
