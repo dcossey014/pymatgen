@@ -522,7 +522,9 @@ class BgwInput(BgwInputTask):
                 val, six.string_types) else self.proc_key_val(key.strip(), val)
 
     def proc_key_val(self, key, val):
+        #print("key: {}\nVal: {}\n\n".format(key, val))
         isp_dict = self.params.get('input_set_params', {})
+        #print("Input Dictionary:  {}\n\n".format(isp_dict))
 
         valid_params = {
             'epsilon': {
@@ -692,9 +694,15 @@ class BgwInput(BgwInputTask):
             if key not in ignore_list:
                 print("\nKey: '{}' not found in valid parameters. ".format(key)+
                         "Setting Key/Val pair as class attribute.")
-                self.__dict__.update({key: val})
+            self.__dict__.update({key: val})
+            '''elif key == 'structure':
+                d = {'structure': val.as_dict()}
+                isp_dict.update(d)
             else:
-                isp_dict.update({key,val})
+                d = {key: val}
+                print("d: {}".format(d))
+                isp_dict.update(d)
+                '''
         else:
             if key_dict == 'int':
                 try:

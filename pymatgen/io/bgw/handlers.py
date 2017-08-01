@@ -27,6 +27,7 @@ from custodian.ansible.interpreter import Modder
 
 logger = logging.getLogger(__name__)
 
+QE_BACKUP_FILES  = ['in', 'out', 'pp_in', 'pp_out']
 BGW_BACKUP_FILES = ["OUT.*", "*.inp", "FW*", "bgw.log", "pbs.log"]
 
 class QuantumEspressoErrorHandler(ErrorHandler):
@@ -40,7 +41,15 @@ class QuantumEspressoErrorHandler(ErrorHandler):
                          ],
                 'n_plane_waves':['Error in routine n_plane_waves',
                                  'No plane waves found: running on too many processors?'
-                                 ]
+                                 ],
+                'g-vectors': ['Error in routine  cdiaghg (155)',
+                            'no G-vectors found' 
+                            ],
+                'cholesky': ['Error in routine  cdiaghg (727)',
+                            'problems computing cholesky'
+                            ],
+                'error':    ['MPT ERROR', 'ERROR'
+                            ]
                 }
 
     def __init__(self):
@@ -73,7 +82,7 @@ class QuantumEspressoErrorHandler(ErrorHandler):
         return len(self.errors) > 0
 
     def correct(self):
-        backup(BGW_BACKUP_FILES)
+        backup(QE_BACKUP_FILES)
         actions = []
 
         return {"errors": self.errors, "actions": actions}

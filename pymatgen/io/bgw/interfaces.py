@@ -269,7 +269,7 @@ class BgwWorkflow():
                 fw_deps = []
                 for j in deps[i]:
                     fw_deps.append(j.Firework)
-                self.dependency[i.Firework]=fw_deps
+                self.dependency[i]=fw_deps
         else:
             id = len(self.fws) - 2
             self.dependency[self.fws[id]]=[fw_task.Firework]
