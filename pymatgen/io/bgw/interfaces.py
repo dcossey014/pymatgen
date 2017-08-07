@@ -370,8 +370,8 @@ class QeMeanFieldTask(FireTaskBase):
         log_cart_kpts = self.get('log_cart_kpts', False)
         self.alternate_kpoints = self.get('bandstructure_kpoint_path', False)
         self.num_kpoints = self.get('num_kpoints', 500)
-        self.pw = self.get('pw_cmd', 'pw.x')
-        self.pw2bgw = self.get('pw2bgw_cmd', 'pw2bgw.x')
+        self.pw = self.get('pw_cmd', 'pw.x').split()
+        self.pw2bgw = self.get('pw2bgw_cmd', 'pw2bgw.x').split()
         self.prev_dirs = {'ESPRESSO': {}}
         self.qe_dirs = self.prev_dirs['ESPRESSO']
         self.output = {}
@@ -506,10 +506,10 @@ class QeMeanFieldTask(FireTaskBase):
 
     def run_pw(self, pwx, dir_name, pw2bgwx=None):
         mpi_pw = list(self.mpi_cmd)
-        mpi_pw.extend([pwx])
+        mpi_pw.extend(pwx)
         if pw2bgwx and not self.alternate_kpoints:
             mpi_pw2bgw = list(self.mpi_cmd)
-            mpi_pw2bgw.extend([pw2bgwx])
+            mpi_pw2bgw.extend(pw2bgwx)
             job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
         else:
             job = PWJob(mpi_pw)

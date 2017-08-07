@@ -63,7 +63,6 @@ class BgwInputTask(FireTaskBase):
         self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
 
-        print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
 
         #Build Pseudo Dictionary and List of PPs files if given Structure
         if self.structure:
@@ -79,18 +78,6 @@ class BgwInputTask(FireTaskBase):
                         pps.append(os.path.join(self.pseudo_dir,m.group(0)))
                 self.pseudo_files.append(pps[-1])
                 self.pseudo[i.encode('ascii', 'ignore')] = pps[-1].split('/')[-1]
-
-            #Determine number of Occupied bands
-            #gk this is the number of electrons!
-            #self.occupied_bands = 0
-            #for i in self.pseudo_files:
-            #    with open(i, 'r') as fin:
-            #        sf = mmap.mmap(fin.fileno(), 0, access=mmap.ACCESS_READ)
-            #        fin.seek(sf.find('z_valence'))
-            #        self.occupied_bands += float(fin.readline().split(
-            #                                        '=')[-1][1:-2])
-            #print "gk: in BgwInputTask.__init__ from the pseudo files, self.occupied_bands = ",self.occupied_bands
-            
 
         params = {'structure': self.structure, 'pseudo_dir': self.pseudo_dir,
                 'kpoints': self.kpoints, 'qshift': self.qshift, 
@@ -503,9 +490,6 @@ class BgwInput(BgwInputTask):
                 'qemf_dir': qemf_dir}
 
         super(BgwInput, self).__init__(self.params)
-
-        #print "gk: need to check band degeneracy here by calling degeneracy_check.x"
-        #self.check_degeneracy()
 
 
 
