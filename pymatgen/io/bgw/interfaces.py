@@ -217,14 +217,17 @@ class BgwWorkflow():
 
     def __init__(self, *args, **kwargs):
         '''
-        :param args:       (VaspFirework objects) objects to create Workflow from.  
+        :param args:        (VaspFirework objects) objects to create Workflow from.  
                             No limiton the amount of VaspInputInterface objects to 
                             be given.  Entered as just comma separated objects 
                             passed to class.
-        :param deps_dict:  (dict) specifies the dependency of the BgwInput objects 
+        :param deps_dict:   (dict) specifies the dependency of the BgwInput objects 
                             given.  If no dependency is given, Firworks are assumed 
                             to be sequentially dependent.
-        :param name        (str) Name given to Workflow
+        :param name         (str) Name given to Workflow
+        :param db_upload:   (bool) Set to True for automatic insertion to MongoDB
+                            database.  Will read 'bgw_db.yaml' file for DB information.
+                            Default: False
         '''
         self.fws = []
         self.name = kwargs.get('name', 'Sequential WF')
@@ -513,7 +516,9 @@ class QeMeanFieldTask(FireTaskBase):
             job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
         else:
             job = PWJob(mpi_pw)
-        c = Custodian(handlers=[], validators=[], jobs=[job])
+        handlers = []
+        handlers.append(load_class("pymatgen.io.bgw.handlers", 'QuantumEspressoErrorHandler')())
+        c = Custodian(handlers=handlers, validators=[], jobs=[job])
         self.output[dir_name] = c.run()
 
     def add_spec(self, key, val):

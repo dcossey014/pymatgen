@@ -183,9 +183,8 @@ class BgwDB(FireTaskBase):
         if self.upload:
             self.insert_db(self.get_dict())
         else:
-            #pp = pprint.PrettyPrinter(indent=2)
-            #pp.pprint(self.get_dict())
-            pass
+            pp = pprint.PrettyPrinter(indent=2)
+            pp.pprint(self.get_dict())
 
     '''
     def get_dict(self, esp_dir, bgw_dirs):

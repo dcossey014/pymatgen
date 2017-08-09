@@ -20,6 +20,7 @@ import os
 from fireworks import LaunchPad, Firework
 from custodian.custodian import ErrorHandler
 from custodian.utils import backup
+from pymatgen.io.pwscf import PWInput
 from pymatgen.io.bgw.inputs import BgwInput
 from pymatgen.io.bgw.interfaces import BgwFirework, BgwCustodianTask
 from pymatgen.io.bgw.interpreter import BgwModder
@@ -36,21 +37,26 @@ class QuantumEspressoErrorHandler(ErrorHandler):
     '''
 
     is_monitor=True
-    err_msgs = {'ndiag':['Error in routine check_para_diag',
-                         'Too few bands for required ndiag'
-                         ],
-                'n_plane_waves':['Error in routine n_plane_waves',
-                                 'No plane waves found: running on too many processors?'
-                                 ],
-                'g-vectors': ['Error in routine  cdiaghg (155)',
-                            'no G-vectors found' 
-                            ],
-                'cholesky': ['Error in routine  cdiaghg (727)',
-                            'problems computing cholesky'
-                            ],
-                'error':    ['MPT ERROR', 'ERROR'
-                            ]
-                }
+    error_msgs = {
+            'ndiag':[
+                'Error in routine check_para_diag',
+                'Too few bands for required ndiag'
+                ],
+            'n_plane_waves':[
+                'Error in routine n_plane_waves',
+                'No plane waves found: running on too many processors?'
+                ],
+            'g-vectors': [
+                'Error in routine  cdiaghg (155)'
+                ],
+            'cholesky': [
+                'Error in routine  cdiaghg (727)',
+                'problems computing cholesky'
+                ],
+            'error': [
+                'MPT ERROR', 'ERROR'
+                ]
+            }
 
     def __init__(self):
         """
@@ -73,22 +79,33 @@ class QuantumEspressoErrorHandler(ErrorHandler):
 
         self.errors = set()
         with open(self.output_filename, 'r') as fout:
-            for line in f:
+            print("opened '{}' file for reading".format(self.output_filename))
+            import os
+            print("PWD: {}".format(os.path.abspath('.')))
+            for line in fout:
+                print("line: {}".format(line))
                 l = line.strip()
-                for err, msgs in BgwErrorHandler.error_msgs.items():
+                for err, msgs in QuantumEspressoErrorHandler.error_msgs.items():
                     for msg in msgs:
                         if l.find(msg) != -1:
+                            print("\n\nfound error: {}\nat line: {}".format(msg, l))
                             self.errors.add(err)
+            print("Found these errors: {}".format(self.errors))
         return len(self.errors) > 0
 
     def correct(self):
         backup(QE_BACKUP_FILES)
         actions = []
 
-        return {"errors": self.errors, "actions": actions}
+        ''' # Example
+        if self.errors.intersection(['ndiag']):
+            actions.append({'dict': 'INCAR', 
+                        "action": {'_set': {'key': 'val'}}})
+        '''
+        return {"errors": list(self.errors), "actions": actions}
 
     def __str__(self):
-        return "BgwErrorHandler"
+        return "QuantumEspressoErrorHandler"
 
 class BgwErrorHandler(ErrorHandler):
     """
@@ -97,7 +114,10 @@ class BgwErrorHandler(ErrorHandler):
 
     is_monitor = True
 
-    err_msgs = {}
+    error_msgs = {
+                'error':    ['MPT ERROR', 'ERROR'
+                            ]
+                }
 
     def __init__(self, run_type=""):
         """

@@ -63,7 +63,7 @@ class BgwInputTask(FireTaskBase):
         self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
 
-        print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
+        #print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
 
         #Build Pseudo Dictionary and List of PPs files if given Structure
         if self.structure:
@@ -488,7 +488,7 @@ class BgwInput(BgwInputTask):
                                 Default: semiconductor
     '''
 
-    def __init__(self, structure, pseudo_dir, isp={}, cmplx_real='real',
+    def __init__(self, structure, pseudo_dir, isp={}, cmplx_real='cmplx',
                 kpoints=None, qshift=None, mat_type='semiconductor',
                 kps=None, occupied_bands = None, filename=None,
                 qemf_dir=None):
@@ -691,18 +691,13 @@ class BgwInput(BgwInputTask):
                     'isp', 'run_type', 'mat_type', 'filename', 'pseudo', 
                     'pseudo_files', 'occupied_bands', 'kps', 'kgrid', 'cmplx_real','qemf_dir',
                     'config_file','qe_dirs', 'bgw_dirs']
+            if key in ignore_list:
+                self.__dict__['params'].update({key:val})
             if key not in ignore_list:
                 print("\nKey: '{}' not found in valid parameters. ".format(key)+
                         "Setting Key/Val pair as class attribute.")
             self.__dict__.update({key: val})
-            '''elif key == 'structure':
-                d = {'structure': val.as_dict()}
-                isp_dict.update(d)
-            else:
-                d = {key: val}
-                print("d: {}".format(d))
-                isp_dict.update(d)
-                '''
+
         else:
             if key_dict == 'int':
                 try:
