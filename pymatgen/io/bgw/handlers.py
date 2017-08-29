@@ -15,7 +15,7 @@ __date__ = "7/01/17"
 
 import math
 import logging
-import os
+import os, glob
 
 from fireworks import LaunchPad, Firework
 from custodian.custodian import ErrorHandler
@@ -83,14 +83,17 @@ class QuantumEspressoErrorHandler(ErrorHandler):
             import os
             print("PWD: {}".format(os.path.abspath('.')))
             for line in fout:
-                print("line: {}".format(line))
+                #print("line: {}".format(line))
+                logger.debug("line: {}".format(line))
                 l = line.strip()
                 for err, msgs in QuantumEspressoErrorHandler.error_msgs.items():
                     for msg in msgs:
                         if l.find(msg) != -1:
-                            print("\n\nfound error: {}\nat line: {}".format(msg, l))
+                            #print("\n\nfound error: {}\nat line: {}".format(msg, l))
+                            logger.debug("\n\nfound error: {}\nat line: {}".format(msg, l))
                             self.errors.add(err)
-            print("Found these errors: {}".format(self.errors))
+            #print("Found these errors: {}".format(self.errors))
+            logger.info("Found these errors: {}".format(self.errors))
         return len(self.errors) > 0
 
     def correct(self):
@@ -119,6 +122,7 @@ class BgwErrorHandler(ErrorHandler):
                             ]
                 }
 
+    #TODO: Fix runtype with glob
     def __init__(self, run_type=""):
         """
         Initializes with an output file name.
@@ -130,8 +134,20 @@ class BgwErrorHandler(ErrorHandler):
                 default redirect used by :class:`custodian.nwchem.jobs
                 .NwchemJob`.
         """
-        self.run_type = runtype
-        self.bgwi = BGWInput.from_file("{}.inp".format(run_type))
+
+        input_files = glob.glob("*.inp")
+        if len(input_files) > 1:
+            logger.info("found more than one input file.  Using {}".format(
+                input_files[0]))
+            print("found more than one input file.  Using {}".format(
+                input_files[0]))
+        elif len(input_files) < 1:
+            logger.info("Could not find an input file.")
+            print("Could not find an input file.")
+            raise NameError("Could not find an input file.")
+
+        self.run_type = input_files[0].split()[0]
+        self.bgwi = BGWInput.from_file(input_files[0])
         self.output_filename = "OUT.{}".format(run_type[:3])
 
     def check(self):
@@ -167,7 +183,7 @@ class BgwMemoryHandler(ErrorHandler):
     is_monitor = True
     is_terminating = True
 
-    def __init__(self, run_type="absorption"):
+    def __init__(self):
         """
         Initializes with an output file name.
 
@@ -179,10 +195,21 @@ class BgwMemoryHandler(ErrorHandler):
                 .NwchemJob`.
         """
         logger = logging.getLogger(__name__)
-        #logger.debug("init for BgwMemoryHandler\nrun_type: {}".format(run_type))
 
-        self.run_type = run_type
-        self.bgwi = BgwInput.from_file("{}.inp".format(run_type))
+        input_files = glob.glob("*.inp")
+        if len(input_files) > 1:
+            logger.info("found more than one input file.  Using {}".format(
+                input_files[0]))
+            print("found more than one input file.  Using {}".format(
+                input_files[0]))
+        elif len(input_files) < 1:
+            logger.info("Could not find an input file.")
+            print("Could not find an input file.")
+            raise NameError("Could not find an input file.")
+
+        self.run_type = input_files[0].split()[0]
+        logger.debug("init for BgwMemoryHandler\nrun_type: {}".format(self.run_type))
+        self.bgwi = BgwInput.from_file(input_files[0])
         self.errors = []
         self.output_filename = "OUT.{}".format(run_type[:3])
 
