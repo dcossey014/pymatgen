@@ -94,7 +94,7 @@ class BgwInputTask(FireTaskBase):
         def write_kpoints():
             if not self.kps:
 
-                '''
+                
                 #print("Kpoints: %s" %(self.kpoints))
                 self.kgrid = Kgrid(self.structure, kpoints=self.kpoints, 
                                 offset_type="gamma")
@@ -117,7 +117,7 @@ class BgwInputTask(FireTaskBase):
                         k = j.split()
                         self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:>3.1f}  0\n".format(
                                         float(k[0]), float(k[1]), float(k[2]), float(k[3]))
-            '''
+            
             for kp in self.kps:
                 out.append("  {}".format(kp.strip()))
             out.append('end')
