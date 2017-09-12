@@ -36,6 +36,8 @@ def load_class(mod, name):
 
 logger = logging.getLogger(__name__)
 
+#gk: having BGW stuff in pwscf_tasks is confusing
+
 class BGWJob(Job):
     '''
     Docstring

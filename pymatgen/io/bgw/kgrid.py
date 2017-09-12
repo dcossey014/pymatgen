@@ -281,6 +281,7 @@ class Kgrid(object):
             config_dict = {}
 
 
+        # this needs to be fixed where there is only BGW_PAth
         if kgridx:
             kgrid_exec = kgridx
         elif os.environ.get('KGRID_EXEC', None):

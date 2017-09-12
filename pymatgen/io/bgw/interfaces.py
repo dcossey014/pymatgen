@@ -36,6 +36,8 @@ class BgwFirework():
                             Default: 'mpiexec_mpt -n 36'
         -name (str):        Name given to FireWork. Default: Bgw FW
 
+gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatically
+
         -ppx (str):         Post-Processing command.  This is needed for 
                             Sigma calculations to post process for absorption
                             calculations.  Default: None.
@@ -62,6 +64,14 @@ class BgwFirework():
         self.mpi_cmd = mpi_cmd
         self.bgw_cmd = bgw_cmd
         self.ppx = ppx 
+
+        # check paramers before job submission to not waste time on queue
+        bgw_task.check_params()
+
+        #gk: debug
+        dbg_file=bgw_task.run_type+'_dbg.inp'
+        bgw_task.write_file(dbg_file)
+        #gk: end
 
         if config_file:
             config_dict = loadfn(config_file)
@@ -408,6 +418,8 @@ class QeMeanFieldTask(FireTaskBase):
         os.chdir('./ESPRESSO')
 
         # function for setting up an mean field task
+        #gk: adjustments should be avoided at runtime. They should be done
+        #gk: when the fw spec is created
         def make_qemf_input(qe_task):
             self.dir_setup(qe_task)
             if self.alternate_kpoints and qe_task != 'scf':
@@ -427,6 +439,8 @@ class QeMeanFieldTask(FireTaskBase):
             qe_task_electrons = qe_electrons.get(qe_task)
 
             # Get number of Bands needed for a good Calculation
+            #gk: this logic is not correct. Some cases use number of occupied 
+            #gk:  bands: wnfq and wfnq_fi 
             bands = 0
     	    composition = self.structure.composition.as_dict()
             for element in self.pseudo.keys():
@@ -554,6 +568,7 @@ class QeMeanFieldTask(FireTaskBase):
             d[k] = val
 
 
+#gk is this code used anymore?
 @explicit_serialize
 class BgwAbsTask(FireTaskBase):
     '''
