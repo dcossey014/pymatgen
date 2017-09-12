@@ -60,6 +60,7 @@ class BgwInputTask(FireTaskBase):
         self.cmplx_real = params.get('cmplx_real')
         self.qemf_dir = params.get('qemf_dir')
         self.kps = params.get('kps', None)
+        #gk: why is occupied_bands set here?
         self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
 
@@ -87,7 +88,9 @@ class BgwInputTask(FireTaskBase):
                 'occupied_bands': self.occupied_bands, 
                 'kps': self.kps, 'cmplx_real': self.cmplx_real,'qemf_dir': self.qemf_dir}
         #super(BgwInputTask, self).__init__()
+        #self.check_write_params()
         self.update(params)
+        print "gk: in BgwInput.__init__(), self.occupied_bands=",self.occupied_bands
         
     def __str__(self):
         out = []
@@ -123,19 +126,23 @@ class BgwInputTask(FireTaskBase):
             out.append('end')
 
         def write_band_occ():
+            print "gk in BgwInput.__str__.write_band_occ(), self.occupied_bands=",self.occupied_bands
             out.append("band_occupation {}*1 {}*0".format(
                     int(self.occupied_bands), 
                     int(self.isp['number_bands']) - int(self.occupied_bands)))
 
         for k1 in self.isp.keys():
             out.append("{}  {}".format(k1, self.isp[k1]))
+        print "gk: first out = ", out
 
         if 'epsilon' in self.run_type:
-            write_band_occ()
+            if self.occupied_bands != None:
+                write_band_occ()
             out.append('begin qpoints')
             write_kpoints()
         elif 'sigma' in self.run_type:
-            write_band_occ()
+            if self.occupied_bands != None:
+                write_band_occ()
             out.append('begin kpoints')
             write_kpoints()
 
@@ -150,12 +157,18 @@ class BgwInputTask(FireTaskBase):
         '''
         if not self.run_type:
             self.run_type = filename
-        self.check_write_params(filename)
+        #gk: probably remove below, because now we are checking at FW creation
+        self.check_params()
+        with open(filename, 'w') as f:
+            f.write(self.__str__()+'\n')
 
-    def check_write_params(self, filename):
+    def check_params(self):
+        #gk: probably none of these are required in BGW v 1.2
         eps_params = ['epsilon_cutoff', 'number_bands']
-        sig_params = ['screened_coulomb_cutoff', 'bare_coulomb_cutoff',
-                    'number_bands', 'band_index_min', 'band_index_max']
+        #gk: probably none of these are required
+        #sig_params = ['screened_coulomb_cutoff', 'bare_coulomb_cutoff',
+        #            'number_bands', 'band_index_min', 'band_index_max']
+        sig_params = ['number_bands', 'band_index_min', 'band_index_max']
         krn_params = ['number_val_bands', 'number_cond_bands', 
                     'screened_coulomb_cutoff', 'bare_coulomb_cutoff']
         abs_params = ['number_val_bands_coarse', 'number_val_bands_fine',
@@ -167,9 +180,19 @@ class BgwInputTask(FireTaskBase):
         if 'epsilon' in self.run_type:
             params = list(eps_params)
         elif 'sigma' in self.run_type:
+            #gk: sigma picks up number_bands from epsilon? 
             params = list(sig_params)
-            self.isp['band_index_max'] = self.isp.get('band_index_max', 
-                                        self.isp.get('number_bands', 0))
+            self.isp['band_index_min'] = self.isp.get('band_index_min',1)
+            #self.isp['band_index_max'] = self.isp.get('band_index_max', 
+            #                            self.isp.get('number_bands', 0))
+            bim=self.isp.get('band_index_max',self.isp.get('number_bands', 0))
+            bm=self.isp.get('number_bands')
+            bim=bm if bim>bm else bim
+            self.isp['band_index_max']=bim
+            print "gk: in BgwInput.check params"
+            print "gk:     band_index_min=", self.isp.get('band_index_min')
+            print "gk:     band_index_max=", self.isp.get('band_index_max')
+            print "gk:     number_bands=", self.isp.get('number_bands')
         elif 'sig2wan' in self.run_type:
             params = list(sig2wan_params)
         elif 'abs' in self.run_type:
@@ -178,20 +201,22 @@ class BgwInputTask(FireTaskBase):
             params = list(krn_params)
         else:
             raise NameError('Unrecognized Calculation Type: run_type = %s' 
-                        %filename.split('.')[0])
+                        %self.run_type)
             return
         
         for i in params:
             if i not in self.isp.keys():
                 raise KeyError('Required Key: "{}"'.format(i) + 
                         ' was not found for given run_type.  ' +
-                        'Using run_type: "{}"'.format(filename.split('.')[0]))
+                        'Using run_type: "{}"'.format(self.run_type))
                 return
 
-        with open(filename, 'w') as f:
-            f.write(self.__str__()+'\n')
+        #with open(filename, 'w') as f:
+        #    f.write(self.__str__()+'\n')
 
     def dep_setup(self, fout):
+
+        print "gk: in dep_setup"
 
         def force_link(file1,file2):
             try:
@@ -204,16 +229,21 @@ class BgwInputTask(FireTaskBase):
         def extra_links(set):
             if 'eps' in set:
                 dir = self.bgw_dirs['epsilon']
-                files = ['eps0mat', 'epsmat']
+                #gk: possibly use logic for non HDF5 case
+                #files = ['eps0mat', 'epsmat']
+                files = ['eps0mat.h5', 'epsmat.h5']
             elif 'bse' in set:
                 dir = self.bgw_dirs['kernel']
-                files = ['bsedmat', 'bsexmat']
+                #gk: possibly use logic for non HDF5 case
+                #files = ['bsedmat', 'bsexmat']
+                files = ['bsemat.h5']
             for f in files:
                 force_link(os.path.join(dir, f),
                         os.path.join('.', f))
 
         print "self.cmplx_real = ", self.cmplx_real
         wfn_file='wfn.'+self.cmplx_real
+        wfn_co_file='wfn_co.'+self.cmplx_real
 
         if 'epsilon' in fout:
             print "Setting up Epsilon dependencies and checking input values."
@@ -227,15 +257,23 @@ class BgwInputTask(FireTaskBase):
             self.check_degeneracy(['./WFN'])
 
         if 'sigma' in fout:
+            print "Setting up Sigma dependencies and checking input values."
             wfn_co = self.qe_dirs['wfn_co']
+            #wfn = self.qe_dirs['wfn']
             force_link(os.path.join(wfn_co, 'vxc.dat'),
                     './vxc.dat')
             rho_file='rho.'+self.cmplx_real
             force_link(os.path.join(wfn_co, rho_file),
                     './RHO')
+            #gk: number_bands from here?
+            #force_link(os.path.join(wfn_co, wfn_co_file),
+            #        './WFN_outer')
+            #gk: or number_bands from here?
+            #gk: WFN_inner could be wfn_co or wfn....????
             force_link(os.path.join(wfn_co, wfn_file), 
                     './WFN_inner')
             extra_links('eps')
+            #gk: number_bands checked and adjusted here
             self.check_degeneracy(['./WFN_inner'])
 
         if 'kernel' in fout:
@@ -285,8 +323,9 @@ class BgwInputTask(FireTaskBase):
         p_wfn=subprocess.Popen(de_check_exec,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         p_wfn.wait()
 
+        #gk: check status here and if fails send a message
+
         allowed_bands, allowed_vbands, allowed_cbands = [], [], []
-        print "check_degeneracy report for WFN"
         lines = p_wfn.stdout.readlines()
         alist = ['buff']
         for line in lines:
@@ -362,9 +401,9 @@ class BgwInputTask(FireTaskBase):
                 print "occupied_bands is reset to to degeneracy allowed value,",matched_vband
                 self.occupied_bands=matched_vband
     
-        if 'epsilon' in self.filename or 'sigma' in self.filename:
+        if 'epsilon' in self.filename:
             user_nbands=int(self.isp.get('number_bands', 0))
-            print "User specified number_bands =", user_nbands
+            print "For Epsilon user specified number_bands =", user_nbands
             if user_nbands < self.occupied_bands:
                 print "Number of bands cannot be less than Number of Valence Bands"
                 user_nbands = allowed_bands[-1]
@@ -373,11 +412,43 @@ class BgwInputTask(FireTaskBase):
             self.allowed_nbands=match_bands(user_nbands,allowed_bands)
 
             if self.allowed_nbands == user_nbands:
-                print "User specified bands is degeneracy allowed"
+                print "User specified epsilon number_bands is degeneracy allowed"
                 self.isp['number_bands'] = user_nbands
             else:
-                print "Number_bands is reset to to degeneracy allowed value,",self.allowed_nbands
+                print "Epsilon number_bands is reset to to degeneracy allowed value,",self.allowed_nbands
                 self.isp['number_bands']=self.allowed_nbands
+
+        if 'sigma' in self.filename:
+            user_nbands=int(self.isp.get('number_bands', 0))
+            print "For Sigma, user specified number_bands =", user_nbands
+            if user_nbands < self.occupied_bands:
+                print "Number of bands cannot be less than Number of Valence Bands"
+                user_nbands = allowed_bands[-1]
+                print "Resetting number_bands to, ",user_nbands
+            print "Checking for allowed bands closest to number_bands."
+            self.allowed_nbands=match_bands(user_nbands,allowed_bands)
+
+            if self.allowed_nbands == user_nbands:
+                print "Sigma user specified bands is degeneracy allowed"
+                self.isp['number_bands'] = user_nbands
+            else:
+                print "Sigma number_bands is reset to to degeneracy allowed value,",self.allowed_nbands
+                self.isp['number_bands']=self.allowed_nbands
+
+            max_nbands=int(self.isp.get('band_index_max', 0))
+            print "For Sigma, user specified band_index_max =", max_nbands
+            if max_nbands < self.occupied_bands:
+                print "Number of bands cannot be less than Number of Valence Bands"
+                exit()
+            print "Checking for allowed bands closest to band_index_max."
+            self.allowed_nbands=match_bands(max_nbands,allowed_bands)
+
+            if self.allowed_nbands == max_nbands:
+                print "Sigma user specified bands is degeneracy allowed"
+                self.isp['band_index_max'] = max_nbands
+            else:
+                print "Sigma band_index_max is reset to to degeneracy allowed value,",self.allowed_nbands
+                self.isp['band_index_max']=self.allowed_nbands
                 
         if 'kernel' in self.filename:
             user_vband = self.isp.get('number_val_bands', None)
@@ -415,12 +486,12 @@ class BgwInputTask(FireTaskBase):
         
     def dry_run(self):
 
-        try: 
-            self.qemf_dir != None
-        except:
+        print "gk: in BgwInputTask.dry_run(), self.qemf_dir=",self.qemf_dir
+        if self.qemf_dir == None:
             print "Can not perform a dry_run without specifying a qemf_dir"
-            raise
+            exit()
 
+        # hard-wire kludge for dry run. user expected to supply this
         self.qe_dirs= {
             "wfnq": self.qemf_dir+"/wfnq",
             "wfn": self.qemf_dir+"/wfn",
@@ -430,6 +501,10 @@ class BgwInputTask(FireTaskBase):
             "wfn_co": self.qemf_dir+"/wfn_co"
         }
         print 'qe_dirs=',self.qe_dirs
+
+        # hard-wire kludge: expecting files to be in current directory
+        # hypthetically
+        self.bgw_dirs = { "epsilon": "./", "sigma": "./", "kernel": "./" }
 
         self.dep_setup(self.filename)
         self.write_file(self.filename)

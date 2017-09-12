@@ -11,7 +11,7 @@ from fireworks import Firework, Workflow, LaunchPad
 
 test_dir="/home/gkedz/python/MaterialsProject/pymatgen/test_files"
 
-s=Structure.from_file('./Si_sg227_exp.cif')
+s=Structure.from_file('./mp-149_Si.cif')
 my_control={"calculation": "scf", "pseudo_dir": "/home/gkedz/BGW/WorkFlows/PWSCF"}
 my_pseudo={"Si": "Si.UPF"}
 my_system={"ecutwfc": 25}
