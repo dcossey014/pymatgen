@@ -21,7 +21,7 @@ class BgwModder(Modder):
                 mode, unsupported actions are simply ignored without any
                 errors raised. In strict mode, if an unsupported action is
                 supplied, a ValueError is raised. Defaults to True.
-            vi (VaspInput): A VaspInput object from the current directory.
+            bgw (BgwInput): A BgwInput object from the current directory.
                 Initialized automatically if not passed (but passing it will
                 avoid having to reparse the directory).
         """

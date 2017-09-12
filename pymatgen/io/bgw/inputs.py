@@ -64,6 +64,7 @@ class BgwInputTask(FireTaskBase):
         self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
 
+        #print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
 
         #Build Pseudo Dictionary and List of PPs files if given Structure
         if self.structure:
@@ -95,6 +96,8 @@ class BgwInputTask(FireTaskBase):
         out = []
         def write_kpoints():
             if not self.kps:
+
+                '''
                 #print("Kpoints: %s" %(self.kpoints))
                 self.kgrid = Kgrid(self.structure, kpoints=self.kpoints, 
                                 offset_type="gamma")
@@ -117,7 +120,7 @@ class BgwInputTask(FireTaskBase):
                         k = j.split()
                         self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:>3.1f}  0\n".format(
                                         float(k[0]), float(k[1]), float(k[2]), float(k[3]))
-
+            '''
             for kp in self.kps:
                 out.append("  {}".format(kp.strip()))
             out.append('end')
@@ -550,7 +553,7 @@ class BgwInput(BgwInputTask):
                                 Default: semiconductor
     '''
 
-    def __init__(self, structure, pseudo_dir, isp={}, cmplx_real='real',
+    def __init__(self, structure, pseudo_dir, isp={}, cmplx_real='cmplx',
                 kpoints=None, qshift=None, mat_type='semiconductor',
                 kps=None, occupied_bands = None, filename=None,
                 qemf_dir=None):
@@ -750,18 +753,13 @@ class BgwInput(BgwInputTask):
                     'isp', 'run_type', 'mat_type', 'filename', 'pseudo', 
                     'pseudo_files', 'occupied_bands', 'kps', 'kgrid', 'cmplx_real','qemf_dir',
                     'config_file','qe_dirs', 'bgw_dirs']
+            if key in ignore_list:
+                self.__dict__['params'].update({key:val})
             if key not in ignore_list:
                 print("\nKey: '{}' not found in valid parameters. ".format(key)+
                         "Setting Key/Val pair as class attribute.")
             self.__dict__.update({key: val})
-            '''elif key == 'structure':
-                d = {'structure': val.as_dict()}
-                isp_dict.update(d)
-            else:
-                d = {key: val}
-                print("d: {}".format(d))
-                isp_dict.update(d)
-                '''
+
         else:
             if key_dict == 'int':
                 try:

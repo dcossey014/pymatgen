@@ -268,7 +268,8 @@ class Kgrid(object):
             fout.write("{}\n".format(".true." if self.bgw_rev_off else ".false."))
             fout.write("{}\n".format(".true." if self.log_cart_kpts else ".false."))
 
-    def generate_kpoints(self, basename, config_file=None, kgridx=None):
+    #def generate_kpoints(self, basename, config_file=None, kgridx=None):
+    def generate_kpoints(self, basename, config_file=None):
         if config_file:
             config_dict = loadfn(config_file)
             kgrid_exec = os.path.join(config_dict['BGW_DIR'], 'kgrid.x')
@@ -280,25 +281,6 @@ class Kgrid(object):
         else:
             config_dict = {}
 
-
-        # this needs to be fixed where there is only BGW_PAth
-        if kgridx:
-            kgrid_exec = kgridx
-        elif os.environ.get('KGRID_EXEC', None):
-            kgrid_exec = os.environ['KGRID_EXEC']
-
-        try:
-            if not kgridx and not config_file and not os.environ['KGRID_EXEC']:
-                return "No location for kgrid.x was given.  Specify location in config_file ",\
-                        "as kgridx or in method call with kgridx=</path/to/kgrid.x>"
-            elif config_file and kgridx:
-                if config_dict['kgridx']:
-                    return "Please specify kgridx in the configuration file or in the method call,"\
-                            "not both.  Found multiple locations for kgrid.x"
-            else:
-                print("Continuing with kgrid.x from {}\n".format(kgrid_exec))
-        except:
-            print("Continuing with kgrid.x from {}\n".format(kgrid_exec))
 
         self.write_input(basename+".in")
         p = subprocess.Popen([kgrid_exec, basename+'.in', basename+'.out', basename+'.log'])
