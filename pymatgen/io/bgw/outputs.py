@@ -376,6 +376,11 @@ class BgwRun(MSONable):
         self.cmplx_real = l[1]
         if "Sigma" in self.runtype:
             self.band_avgs = {} 
+
+        # Parse Input of run
+        inp = BgwInput.from_directory(self.dirname)
+        self.inp_params = inp.as_dict()
+        drop_line = self.inp_params.pop('_fw_name')
     
     def _parse_version(self, stream):
         l = stream.split()
@@ -470,18 +475,20 @@ class BgwRun(MSONable):
                 'Complex/Real': self.cmplx_real}
         d['Memory Usage'] = {'Required Memory': self.mem_req,
                             'Available Memory': self.mem_avail}
-        d['Timings'] = self.timings
-        d['Band Info'] = {'Highest Occupied Band': self.occ_band_max,
+        d['Input'] = self.inp_params
+        d['Output'] = {'Timings': self.timings}
+        output = d['Output']
+        output['Band Info'] = {'Highest Occupied Band': self.occ_band_max,
                 'Max Valence Band': self.val_max_nrg,
                 'Min Conduction Band': self.cond_min_nrg,
                 'Fermi Energy': self.fermi_nrg,
                 'Units': self.val_units}
         if "Sigma" in self.runtype:
-            d['Sigma Band Avgs'] = self.band_data
-            d['CH Convergence'] = self.ch_convergence
+            output['Sigma Band Avgs'] = self.band_data
+            output['CH Convergence'] = self.ch_convergence
 
         if "Absorption" in self.runtype:
-            d['Dielectric Functions'] = self.absorption
+            output['Dielectric Functions'] = self.absorption
                
         return {self.runtype: d}
 
