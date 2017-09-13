@@ -367,27 +367,6 @@ class BgwInputTask(FireTaskBase):
             else:
                 return after 
 
-            # Old Code
-            '''
-            matched_band_index=0
-            matched_band_diff=9999
-            matched_band_sign=0
-            for band_index in allowed:
-                diff=user_spec-band_index
-                sign=1
-                if diff < 0: sign=-1
-                if abs(diff) < matched_band_diff:      
-                    matched_band_diff=abs(diff)
-                    matched_band_sign=sign
-                    matched_band_index=band_index
-                elif abs(diff) == matched_band_diff:
-                    if sign > matched_band_sign:
-                        matched_band_diff=abs(diff)
-                        matched_band_sign=sign
-                        matched_band_index=band_index
-            return matched_band_index
-            '''
-
         if not self.occupied_bands:
             self.occupied_bands = allowed_vbands[-1]
             print "occupied_bands not set.  Setting including all occupied bands, occupied_bands=",self.occupied_bands

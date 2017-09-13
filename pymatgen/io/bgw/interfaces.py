@@ -69,8 +69,8 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
         bgw_task.check_params()
 
         #gk: debug
-        dbg_file=bgw_task.run_type+'_dbg.inp'
-        bgw_task.write_file(dbg_file)
+        #dbg_file=bgw_task.run_type+'_dbg.inp'
+        #bgw_task.write_file(dbg_file)
         #gk: end
 
         if config_file:
