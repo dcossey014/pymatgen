@@ -170,7 +170,7 @@ class BgwInputTask(FireTaskBase):
         #            'number_bands', 'band_index_min', 'band_index_max']
         sig_params = ['number_bands', 'band_index_min', 'band_index_max']
         krn_params = ['number_val_bands', 'number_cond_bands', 
-                    'screened_coulomb_cutoff', 'bare_coulomb_cutoff']
+                    'screened_coulomb_cutoff']
         abs_params = ['number_val_bands_coarse', 'number_val_bands_fine',
                     'number_cond_bands_coarse', 'number_cond_bands_fine',
                     'energy_resolution']
