@@ -63,7 +63,6 @@ class BgwInputTask(FireTaskBase):
         #gk: why is occupied_bands set here?
         self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
-        self.prev_dirs = fw_spec.get('PREV_DIRS', {'ESPRESSO': {}, 'BGW': {}})
 
         #print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
 
