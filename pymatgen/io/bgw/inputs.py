@@ -486,8 +486,8 @@ class BgwInputTask(FireTaskBase):
         print("finished with dep_setup")
         
         
-    def dry_run(self):
-
+    def dry_run(self, qemf_dir=None):
+        self.qemf_dir = qemf_dir if qemf_dir else params.get('qemf_dir')
         print "gk: in BgwInputTask.dry_run(), self.qemf_dir=",self.qemf_dir
         if self.qemf_dir == None:
             print "Can not perform a dry_run without specifying a qemf_dir"

@@ -310,3 +310,86 @@ class BgwMemoryHandler(ErrorHandler):
 
     def __str__(self):
         return "BgwMemoryErrorHandler"
+
+
+class WalltimeErrorHandler(ErrorHandler):
+    """
+    Check if a run is nearing the walltime. If so, terminate the running process
+    so that the BgwCustodianTask() can create a new Firework to continue the
+    job if necessary.  You can specify the walltime either in the init (
+    which is unfortunately necessary for SGE and SLURM systems. If you happen
+    to be running on a PBS system and the PBS_WALLTIME variable is in the run
+    environment, the wall time will be automatically determined if not set. If 
+    using AFRL PBS templates, this Environmental Variable should be generated
+    automatically from the PBS script.
+    """
+    is_monitor = True
+    is_terminating = True
+
+    # This handler will be unrecoverable, but custodian shouldn't raise an
+    # error
+    raises_runtime_error = False
+
+    def __init__(self, walltime=None, buffer_time=300):
+        """
+        Initializes the handler with a buffer time.
+
+        Args:
+            walltime (int): Total walltime in seconds. If this is None and
+                the job is running on a PBS system, the handler will attempt to
+                determine the walltime from the PBS_WALLTIME environment
+                variable. If the wall time cannot be determined or is not
+                set, this handler will have no effect.
+            buffer_time (int): The min amount of buffer time in secs at the
+                end that the STOPCAR will be written. The STOPCAR is written
+                when the time remaining is < the higher of 3 x the average
+                time for each ionic step and the buffer time. Defaults to
+                300 secs, which is the default polling time of Custodian.
+                This is typically sufficient for the current ionic step to
+                complete. But if other operations are being performed after
+                the run has stopped, the buffer time may need to be increased
+                accordingly.
+        """
+        if walltime is not None:
+            self.walltime = walltime
+
+        elif "PBS_WALLTIME" in os.environ:
+            self.walltime = os.environ["PBS_WALLTIME"]
+            wt = self.walltime.split(":")
+            wt_delta = datetime.timedelta(hours=int(wt[0]), 
+                    minutes=int(wt[1]), 
+                    seconds=int(wt[2])) if len(wt) > 1 else None
+            self.walltime = wt_delta.total_seconds() if wt_delta else int(self.walltime)
+
+        else:
+            self.walltime = None
+
+        self.buffer_time = buffer_time
+        self.start_time = datetime.datetime.now()
+        self.prev_check_time = self.start_time
+        ##DEC DEBUG
+        print("printing: Found this walltime: {}".format(self.walltime))
+        logger.info("logging: Found this walltime: {}".format(self.walltime))
+        ##END DEBUG
+
+    def check(self):
+        if self.walltime:
+            run_time = datetime.datetime.now() - self.start_time
+            total_secs = run_time.total_seconds()
+
+            # If the remaining time is less than average time for 3 ionic
+            # steps or buffer_time.
+            time_left = self.walltime - total_secs
+            if time_left < self.buffer_time:
+                return True
+        
+        ##DEC DEBUG
+        print("Time left = {}".format(time_left))
+        logger.info("Time left = {}".format(time_left))
+        ##END DEBUG
+
+        return False
+
+    def correct(self):
+        return {"errors": ["Walltime reached"], "actions": None}
+

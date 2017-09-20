@@ -52,27 +52,11 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
     '''
     
     def __init__(self, bgw_task, name="Bgw FW", bgw_cmd=None,
-                handlers=None, handler_params=None, ppx=None,
-                mpi_cmd='mpiexec_mpt -n 36', config_file=None,
-                complex=False):
+                handlers=['BgwErrorHandler', 'BgwMemoryHandler',
+                'WalltimeErrorHandler'], 
+                handler_params=None, ppx=None,
+                config_file=None, complex=False):
         #TODO: Fix BGW_cmd and handlers.  Correct OUT file configuration.
-        self.name = name
-        self.handlers=handlers if handlers else []
-        self.handler_params=handler_params if handler_params else {}
-        runtype = bgw_task.params['out_file'].split('/')[-1].split('.')[0]
-        self.out_file = "OUT.{}".format(runtype[:3])
-        self.mpi_cmd = mpi_cmd
-        self.bgw_cmd = bgw_cmd
-        self.ppx = ppx 
-
-        # check paramers before job submission to not waste time on queue
-        bgw_task.check_params()
-
-        #gk: debug
-        dbg_file=bgw_task.run_type+'_dbg.inp'
-        bgw_task.write_file(dbg_file)
-        #gk: end
-
         if config_file:
             config_dict = loadfn(config_file)
         elif os.path.exists(os.path.join(os.environ['HOME'], 
@@ -81,6 +65,18 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
                                     'bgw_interface_defaults.yaml'))
         else:
             config_dict = {}
+
+        self.name = name
+        self.handlers=handlers if handlers else []
+        self.handler_params=handler_params if handler_params else {}
+        runtype = bgw_task.params['out_file'].split('/')[-1].split('.')[0]
+        self.out_file = "OUT.{}".format(runtype[:3])
+        self.mpi_cmd = config_dict.get('BGW', {}).get('mpi_cmd', None)
+        self.bgw_cmd = bgw_cmd
+        self.ppx = ppx 
+
+        # check paramers before job submission to not waste time on queue
+        bgw_task.check_params()
 
         if config_dict:
             self.custodian_opts = config_dict.get('CUSTODIAN_PARAMS', {})
