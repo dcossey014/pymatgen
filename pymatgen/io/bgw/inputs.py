@@ -96,31 +96,33 @@ class BgwInputTask(FireTaskBase):
         out = []
         def write_kpoints():
             if not self.kps:
+                kp_dir = self.prev_dirs['ESPRESSO']['wfn']
+                q_shift_dir = self.prev_dirs['ESPRESSO']['wfnq']
+                wfn_out = os.path.join(kp_dir, 'wfn.out')
 
+                with open(os.path.join(q_shift_dir, 'wfnq.in'), 'r') as fin:
+                    lines = fin.readlines()
                 
-                #print("Kpoints: %s" %(self.kpoints))
-                self.kgrid = Kgrid(self.structure, kpoints=self.kpoints, 
-                                offset_type="gamma")
-                self.kps = self.kgrid.generate_kpoints('WFN')
-                drop_line = self.kps.pop(0)
-    
-                qtype = 2 if type == 'metal' else 1
-            
-                for i,j in enumerate(self.kps):
-                    k = j.split()
-                    self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0\n".format(float(k[0]),
-                                        float(k[1]), float(k[2]))
-            
-                if self.run_type == 'epsilon':
-                    self.kps[0] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0  {3}\n".format(
-                                    self.qshift[0], self.qshift[1], self.qshift[2],
-                                    qtype)
+                qshift = [float(i) for i in lines[2].strip().split()]
+                self.kps = Kgrid.from_file(wfn_out)
 
-                    for i,j in enumerate(self.kps[1:], start=1):
-                        k = j.split()
-                        self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:>3.1f}  0\n".format(
-                                        float(k[0]), float(k[1]), float(k[2]), float(k[3]))
+            qtype = 2 if type == 'metal' else 1
+
+            for i,j in enumerate(self.kps):
+                k = j.split()
+                self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0\n".format(float(k[0]),
+                                    float(k[1]), float(k[2]))
             
+            if self.run_type == 'epsilon':
+                self.kps[0] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0  {3}\n".format(
+                                qshift[0], qshift[1], qshift[2],
+                                qtype)
+
+                for i,j in enumerate(self.kps[1:], start=1):
+                    k = j.split()
+                    self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:>3.1f}  0\n".format(
+                                    float(k[0]), float(k[1]), float(k[2]), float(k[3]))
+
             for kp in self.kps:
                 out.append("  {}".format(kp.strip()))
             out.append('end')
@@ -463,8 +465,8 @@ class BgwInputTask(FireTaskBase):
         print("finished with dep_setup")
         
         
-    def dry_run(self):
-
+    def dry_run(self, qemf_dir=None):
+        self.qemf_dir = qemf_dir if qemf_dir else params.get('qemf_dir')
         print "gk: in BgwInputTask.dry_run(), self.qemf_dir=",self.qemf_dir
         if self.qemf_dir == None:
             print "Can not perform a dry_run without specifying a qemf_dir"

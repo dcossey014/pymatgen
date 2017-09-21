@@ -97,7 +97,7 @@ class BgwCustodianTask(FireTaskBase):
         hander_params (dict)    Dictionary of the parameters to be used with
                                 the handlers list above
     '''
-    required_params = ['bgw_cmd', 'fout']
+    required_params = ['bgw_cmd', 'fout', 'config_file']
     optional_params = ['pp_cmd', 'mpi_cmd', 'handlers', 'handler_params']
 
     def run_task(self, fw_spec):
