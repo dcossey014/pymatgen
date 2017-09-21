@@ -1,4 +1,4 @@
-import os
+import os, sys
 import glob
 import shutil
 from math import ceil
@@ -53,7 +53,7 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
     
     def __init__(self, bgw_task, name="Bgw FW", bgw_cmd=None,
                 handlers=['BgwErrorHandler', 'BgwMemoryHandler',
-                'WalltimeErrorHandler'], 
+                'WalltimeErrorHandler'], mpi_cmd=None,
                 handler_params=None, ppx=None,
                 config_file=None, complex=False):
         #TODO: Fix BGW_cmd and handlers.  Correct OUT file configuration.
@@ -71,9 +71,17 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
         self.handler_params=handler_params if handler_params else {}
         runtype = bgw_task.params['out_file'].split('/')[-1].split('.')[0]
         self.out_file = "OUT.{}".format(runtype[:3])
-        self.mpi_cmd = config_dict.get('BGW', {}).get('mpi_cmd', None)
         self.bgw_cmd = bgw_cmd
         self.ppx = ppx 
+        if mpi_cmd:
+            self.mpi_cmd = mpi_cmd
+        else:
+            print("Error: No mpi_cmd given. "
+                    "Please input an mpi_cmd for the job.  \n"
+                    "Usage: bgw_fw = BgwFirework(<bgw_task>, mpi_cmd: <mpi_cmd>, "
+                    "name=<name>, complex='complex|real', config_file='config_file', "
+                    "handlers=[handlers], handler_params={key: value}")
+            sys.exit(1)
 
         # check paramers before job submission to not waste time on queue
         bgw_task.check_params()
@@ -371,7 +379,7 @@ class QeMeanFieldTask(FireTaskBase):
         self.structure = self.get('structure')
         self.kpoints = self.get('kpoints')
         self.pseudo_dir = self.get('pseudo_dir')
-        self.mpi_cmd = self.get('mpi_cmd', "mpiexec_mpt -n 16").split()
+        self.mpi_cmd = self.get('mpi_cmd', None).split()
         kgrid_offset_type = self.get('krgrid_offset_type', 'Monkhorst-Pack')
         qshift = self.get('qshift', [0, 0, 0.001])
         fftw_grid = self.get('fftw_grid', [0,0,0])
