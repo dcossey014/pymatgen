@@ -97,15 +97,15 @@ class BgwCustodianTask(FireTaskBase):
         hander_params (dict)    Dictionary of the parameters to be used with
                                 the handlers list above
     '''
-    required_params = ['bgw_cmd', 'fout', 'config_file']
-    optional_params = ['pp_cmd', 'mpi_cmd', 'handlers', 'handler_params']
+    required_params = ['bgw_cmd', 'mpi_cmd', 'fout'] 
+    optional_params = ['pp_cmd', 'handlers', 'handler_params']
 
     def run_task(self, fw_spec):
         FORMAT = "%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - \n\t\t%(message)s\n"
         logging.basicConfig(filename="bgw.log", level=logging.DEBUG, format=FORMAT)
         logger = logging.getLogger(__name__)
 
-        mpix = self.get('mpi_cmd', 'mpiexec_mpt -n 36').split()
+        mpix = self.get('mpi_cmd').split()
         bgwx = list(mpix)
         bgwx.extend([self.get('bgw_cmd')])
         fout = self.get('fout')
