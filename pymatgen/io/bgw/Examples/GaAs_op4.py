@@ -5,9 +5,9 @@ from fireworks import Firework, Workflow
 import os, copy
 from pymatgen import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.bgw.interfaces import QeMeanFieldTask, BgwAbsTask, BgwFirework, BgwWorkflow
+from pymatgen.io.bgw.interfaces import BgwFirework, BgwWorkflow
+from pymatgen.io.espresso.interfaces import QeMeanFieldTask
 from pymatgen.io.bgw.inputs import BgwInput
-from pymatgen.io.bgw.pwscf_tasks import BgwCustodianTask
 
 s = Structure.from_file('GaAs_sg216_exp.cif')
 finder = SpacegroupAnalyzer(s)
@@ -143,11 +143,12 @@ eps_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
 eps_inp.epsilon_cutoff=20.0
 eps_inp.number_bands = 39
 
-eps_fw = BgwFirework(eps_inp, name="Epsilon Task", complex=cmplx_bool)
+eps_fw = BgwFirework(eps_inp, name="Epsilon Task", complex=cmplx_bool, mpi_cmd='mpiexec_mpt -n 36')
 
 sig_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
                 kpoints=kpoints, qshift=qshift, filename='sigma.inp')
 
+sig_inp.number_bands = 39
 sig_inp.screened_coulomb_cutoff = 10.0
 sig_inp.bare_coulomb_cutoff = 25.0
 sig_inp.band_index_min = 1
@@ -158,16 +159,18 @@ bgw_dir = "/apps/ccm/opt/BerkeleyGW-1.1-beta2/bin/"
 eqp = bgw_dir+'eqp.py'
 ppx = ' '.join([eqp, 'eqp1', './sigma_hp.log', './eqp_co.dat'])
 
-sig_fw = BgwFirework(sig_inp, name="Sigma Task", ppx=ppx, complex=cmplx_bool)
+sig_fw = BgwFirework(sig_inp, name="Sigma Task", ppx=ppx, complex=cmplx_bool, mpi_cmd='mpiexec_mpt -n 36')
 
 krn_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, filename='kernel.inp', cmplx_real=cmplx_real)
 
 krn_inp.screened_coulomb_cutoff = 10.0
 krn_inp.bare_coulomb_cutoff = 25.0
+krn_inp.number_val_bands = 4
+krn_inp.number_cond_bands = 10
 krn_inp.use_symmetries_coarse_grid = True
 krn_inp.screening_semiconductor = True
 
-krn_fw = BgwFirework(krn_inp, name="Kernel Task", complex=cmplx_bool)
+krn_fw = BgwFirework(krn_inp, name="Kernel Task", complex=cmplx_bool, mpi_cmd='mpiexec_mpt -n 36')
 
 abs_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, filename='absorption.inp', cmplx_real=cmplx_real)
 
@@ -180,8 +183,12 @@ abs_inp.use_velocity = True
 abs_inp.gaussian_broadening = True
 abs_inp.energy_resolution = 0.15
 abs_inp.eqp_co_corrections = True
+abs_inp.number_val_bands_coarse = 4
+abs_inp.number_val_bands_fine = 4
+abs_inp.number_cond_bands_coarse = 10
+abs_inp.number_cond_bands_fine = 10
 
-abs_fw = BgwFirework(abs_inp, name='Absorption Task', complex=True)
+abs_fw = BgwFirework(abs_inp, name='Absorption Task', complex=True, mpi_cmd='mpiexec_mpt -n 36')
 
 bgw_wf2 = BgwWorkflow(qemf_fw, eps_fw, sig_fw, krn_fw, abs_fw, 
                     name="QE/BGW Optical Task")

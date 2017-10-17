@@ -5,7 +5,8 @@ from fireworks import Firework, Workflow
 import os
 from pymatgen import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.bgw.interfaces import QeMeanFieldTask, BgwAbsTask, BgwFirework, BgwWorkflow
+from pymatgen.io.bgw.interfaces import BgwFirework, BgwWorkflow
+from pymatgen.io.espresso.interfaces import QeMeanFieldTask
 from pymatgen.io.bgw.inputs import BgwInput
 from pymatgen.io.bgw.pwscf_tasks import BgwCustodianTask
 

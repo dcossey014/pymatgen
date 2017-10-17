@@ -11,14 +11,13 @@ import mmap, fnmatch, re, subprocess
 import copy as cp
 from bisect import bisect_left
 
-from pymatgen.io.bgw.kgrid import generate_kpath
+from pymatgen.io.bgw.kgrid import Kgrid, generate_kpath
 
 from monty.io import zopen
 from monty.dev import deprecated
 from monty.json import MSONable
 from monty.serialization import loadfn
 from collections import defaultdict, OrderedDict
-from pymatgen.io.bgw import Kgrid
 from fireworks import FireTaskBase, explicit_serialize, FWAction
 from pymatgen import Structure
 

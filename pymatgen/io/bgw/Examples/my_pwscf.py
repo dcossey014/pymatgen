@@ -5,8 +5,8 @@ import unittest
 import os
 
 from pymatgen import Structure
-from pymatgen.io.pwscf import PWInput, PWInputError, PWOutput
-from pymatgen.io.bgw.pwscf_tasks import WritePwscfInputTask, SimplePWTask
+from pymatgen.io.espresso.inputs import PWInput, PWInputError, PWOutput
+from pymatgen.io.espresso.custodian_jobs import WritePwscfInputTask, SimplePWTask
 from fireworks import Firework, Workflow, LaunchPad
 
 test_dir="/home/gkedz/python/MaterialsProject/pymatgen/test_files"

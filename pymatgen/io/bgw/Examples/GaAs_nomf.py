@@ -5,9 +5,10 @@ from fireworks import Firework, Workflow
 import os, copy
 from pymatgen import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.bgw.interfaces import QeMeanFieldTask, BgwAbsTask, BgwFirework, BgwWorkflow
+from pymatgen.io.bgw.interfaces import BgwFirework, BgwWorkflow
+from pymatgen.io.espresso.interfaces import QeMeanFieldTask
 from pymatgen.io.bgw.inputs import BgwInput
-from pymatgen.io.bgw.pwscf_tasks import BgwCustodianTask
+from pymatgen.io.bgw.custodian_jobs import BgwCustodianTask
 
 s = Structure.from_file('GaAs_sg216_exp.cif')
 finder = SpacegroupAnalyzer(s)
@@ -145,58 +146,7 @@ eps_inp.number_bands = 27
 #eps_inp.dry_run()
 
 
-eps_fw = BgwFirework(eps_inp, name="Epsilon Task", complex=cmplx_bool)
-
-"""
-sig_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
-                kpoints=kpoints, qshift=qshift, filename='sigma.inp',
-                qemf_dir=prev_qemf_dir)
-
-sig_inp.screened_coulomb_cutoff = 10.0
-sig_inp.bare_coulomb_cutoff = 25.0
-sig_inp.number_bands = 29
-sig_inp.band_index_min = 1
-sig_inp.band_index_max = 14
-sig_inp.screening_semiconductor = True
-
-# what is this?  It looks out of place 
-bgw_dir = "/apps/ccm/opt/BerkeleyGW-1.1-beta2/bin/"
-eqp = bgw_dir+'eqp.py'
-ppx = ' '.join([eqp, 'eqp1', './sigma_hp.log', './eqp_co.dat'])
-
-sig_fw = BgwFirework(sig_inp, name="Sigma Task", ppx=ppx, complex=cmplx_bool)
-
-krn_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, filename='kernel.inp', cmplx_real=cmplx_real,
-                qemf_dir=prev_qemf_dir)
-
-krn_inp.number_cond_bands = 10
-krn_inp.screened_coulomb_cutoff = 10.0
-krn_inp.bare_coulomb_cutoff = 25.0
-krn_inp.use_symmetries_coarse_grid = True
-krn_inp.screening_semiconductor = True
-
-krn_fw = BgwFirework(krn_inp, name="Kernel Task", complex=cmplx_bool)
-
-abs_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, filename='absorption.inp', cmplx_real=cmplx_real,
-                qemf_dir=prev_qemf_dir)
-
-abs_inp.diagonalization = True
-abs_inp.number_cond_bands_coarse = 10
-abs_inp.number_cond_bands_fine = 6
-abs_inp.use_symmetries_coarse_grid = True
-abs_inp.no_symmetries_fine_grid = True
-abs_inp.no_symmetries_shifted_grid = True
-abs_inp.screening_semiconductor = True
-abs_inp.use_velocity = True
-abs_inp.gaussian_broadening = True
-abs_inp.energy_resolution = 0.15
-abs_inp.eqp_co_corrections = True
-
-abs_fw = BgwFirework(abs_inp, name='Absorption Task', complex=cmplx_bool)
-
-bgw_wf2 = BgwWorkflow(eps_fw, sig_fw, krn_fw, abs_fw, 
-                    name="QE/BGW Optical Task")
-"""
+eps_fw = BgwFirework(eps_inp, name="Epsilon Task", complex=cmplx_bool, mpi_cmd='mpiexec_mpt -n 36')
 
 bgw_wf2 = BgwWorkflow(eps_fw, name="QE/BGW Optical Task")
 bgw_wf2.to_file('gaas_nomf.yaml')

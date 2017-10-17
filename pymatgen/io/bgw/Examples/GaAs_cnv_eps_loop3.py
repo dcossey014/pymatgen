@@ -5,7 +5,8 @@ from fireworks import Firework, Workflow, LaunchPad
 import os, copy, string, json, pprint
 from pymatgen import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.bgw.interfaces import QeMeanFieldTask, BgwAbsTask, BgwFirework, BgwWorkflow
+from pymatgen.io.bgw.interfaces import BgwFirework, BgwWorkflow
+from pymatgen.io.espresso.interfaces import QeMeanFieldTask
 from pymatgen.io.bgw.inputs import BgwInput
 import numpy as np
 import commands

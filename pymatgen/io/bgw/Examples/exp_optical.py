@@ -7,7 +7,8 @@ from pymongo import MongoClient
 from pymatgen import Structure
 from fireworks import Firework, Workflow, LaunchPad
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.bgw.interfaces import QeMeanFieldTask, BgwAbsTask, BgwFirework, BgwWorkflow
+from pymatgen.io.bgw.interfaces import BgwFirework, BgwWorkflow
+from pymatgen.io.espresso.interfaces import QeMeanFieldTask
 from pymatgen.io.bgw.inputs import BgwInput
 
 host="wputill-0002.afrl.hpc.mil"
@@ -176,7 +177,7 @@ for material in opt_materials:
     eps_inp.epsilon_cutoff=20.0
     #eps_inp.number_bands = 39
     
-    eps_fw = BgwFirework(eps_inp, name="{} Epsilon Task".format(mname), complex=cmplx_bool)
+    eps_fw = BgwFirework(eps_inp, name="{} Epsilon Task".format(mname), complex=cmplx_bool, mpi_cmd='mpiexec_mpt -n 36')
     
     sig_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
                     kpoints=kpoints['wfn_co'], qshift=qshift, filename='sigma.inp')
@@ -191,7 +192,7 @@ for material in opt_materials:
     eqp = bgw_dir+'eqp.py'
     ppx = ' '.join([eqp, 'eqp1', './sigma_hp.log', './eqp_co.dat'])
     
-    sig_fw = BgwFirework(sig_inp, name="{} Sigma Task".format(mname), ppx=ppx, complex=cmplx_bool)
+    sig_fw = BgwFirework(sig_inp, name="{} Sigma Task".format(mname), ppx=ppx, complex=cmplx_bool, mpi_cmd='mpiexec_mpt -n 36')
     
     krn_inp = BgwInput(s_prim, pseudo_dir=pseudo_dir, filename='kernel.inp', cmplx_real=cmplx_real)
     
