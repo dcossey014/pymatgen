@@ -261,82 +261,121 @@ class PWInput(object):
                         kpoints_shift=kpoints_shift)
 
 
-
-
 class PWInputError(BaseException):
     pass
 
 
-class PWOutput(object):
+class PwPpInput(abc.ABCMeta, MSONable):
+    #TODO   Look into MRO and inheritance vs python version
+    #       maybe use six for portability across versions like VASP?
+    '''
+    Docstring
+    '''
 
-    patterns = {
-        "energies": "total energy\s+=\s+([\d\.\-]+)\sRy",
-        "ecut": "kinetic\-energy cutoff\s+=\s+([\d\.\-]+)\s+Ry",
-        "lattice_type": "bravais\-lattice index\s+=\s+(\d+)",
-        "celldm1": "celldm\(1\)=\s+([\d\.]+)\s",
-        "celldm2": "celldm\(2\)=\s+([\d\.]+)\s",
-        "celldm3": "celldm\(3\)=\s+([\d\.]+)\s",
-        "celldm4": "celldm\(4\)=\s+([\d\.]+)\s",
-        "celldm5": "celldm\(5\)=\s+([\d\.]+)\s",
-        "celldm6": "celldm\(6\)=\s+([\d\.]+)\s",
-        "nkpts": "number of k points=\s+([\d]+)"
-    }
+    def as_dict(self):
+        d = MSONable.as_dict(self)
+        return d
 
-    def __init__(self, filename):
-        self.filename = filename
-        self.data = defaultdict(list)
-        self.read_pattern(PWOutput.patterns)
-        for k, v in self.data.items():
-            if k == "energies":
-                self.data[k] = [float(i[0][0]) for i in v]
-            elif k in ["lattice_type", "nkpts"]:
-                self.data[k] = int(v[0][0][0])
-            else:
-                self.data[k] = float(v[0][0][0])
+    @abc.abstractmethod
+    def write_input(self, filename):
+        """Write Input Files"""
+        pass
 
-    def read_pattern(self, patterns, reverse=False,
-                     terminate_on_match=False, postprocess=str):
-        """
-        General pattern reading. Uses monty's regrep method. Takes the same
-        arguments.
+class PwBandsInput(PwPpInput):
+    """
+    Docstring
+    """
+    def __init__(self, bands=None):
+        self.bands = bands
+
+
+    def __str__(self):
+        return
+
+    def write_input(self, filename):
+        pass
+
+class PW2BGWInput(object):
+    '''
+    Base Input file Class for PW2BGW post-processing.
+    '''
+
+    def __init__(self, structure, pw2bgw_input=None, kpoints=None, k_offset=None, qshift=None ):
+        '''
+        Initializes a PW2BGW input file.
 
         Args:
-            patterns (dict): A dict of patterns, e.g.,
-                {"energy": "energy\(sigma->0\)\s+=\s+([\d\-\.]+)"}.
-            reverse (bool): Read files in reverse. Defaults to false. Useful for
-                large files, esp OUTCARs, especially when used with
-                terminate_on_match.
-            terminate_on_match (bool): Whether to terminate when there is at
-                least one match in each key in pattern.
-            postprocess (callable): A post processing function to convert all
-                matches. Defaults to str, i.e., no change.
+            structure (Structure): Input Stucture.
+            pw2bgw_input (dict): Input parameters.  Refer to official PW2BGW 
+                Quantum Espresso doc for supported parameters. Defaults to
+                {'prefix': Structure.formula, 'wfng_flag': True,
+                'wfng_kgrid': False}
+        '''
 
-        Renders accessible:
-            Any attribute in patterns. For example,
-            {"energy": "energy\(sigma->0\)\s+=\s+([\d\-\.]+)"} will set the
-            value of self.data["energy"] = [[-1234], [-3453], ...], to the
-            results from regex and postprocess. Note that the returned
-            values are lists of lists, because you can grep multiple
-            items on one line.
-        """
-        matches = regrep(self.filename, patterns, reverse=reverse,
-                         terminate_on_match=terminate_on_match,
-                         postprocess=postprocess)
-        self.data.update(matches)
+        self.structure = structure
+        self.sections = {}
+        self.sections['input_pw2bgw'] = pw2bgw_input or {'prefix': Structure.formula,
+                                'wfng_flag': True, 'wfng_kgrid': False}
+        self.kpoints=kpoints
 
-    def get_celldm(self, i):
-        return self.data["celldm%d" % i]
+        if self.kpoints:
+            self.sections['input_pw2bgw']['wfng_kgrid'] = True
+            self.sections['input_pw2bgw']['wfng_nk1'] = int(self.kpoints[0])
+            self.sections['input_pw2bgw']['wfng_nk2'] = int(self.kpoints[1])
+            self.sections['input_pw2bgw']['wfng_nk3'] = int(self.kpoints[2])
 
-    @property
-    def final_energy(self):
-        return self.data["energies"][-1]
+            self.k_offset = k_offset if k_offset else "Monkhorst-Pack"
+            self.qshift = qshift if qshift else [0, 0, 0]
 
-    @property
-    def lattice_type(self):
-        return self.data["lattice_type"]
+            if isinstance(self.k_offset, list):
+                self.sections['input_pw2bgw']['wfng_dk1'] = self.k_offset[0]
+                self.sections['input_pw2bgw']['wfng_dk2'] = self.k_offset[1]
+                self.sections['input_pw2bgw']['wfng_dk3'] = self.k_offset[2]
+            elif "monkhorst" in self.k_offset.lower(): 
+                self.sections['input_pw2bgw']['wfng_dk1'] = 0.5 + self.qshift[0]*self.kpoints[0]
+                self.sections['input_pw2bgw']['wfng_dk2'] = 0.5 + self.qshift[1]*self.kpoints[1]
+                self.sections['input_pw2bgw']['wfng_dk3'] = 0.5 + self.qshift[2]*self.kpoints[2]
+            elif 'random' in self.k_offset.lower():
+                self.sections['input_pw2bgw']['wfng_dk1'] = 0.47 + self.qshift[0]*self.kpoints[0]
+                self.sections['input_pw2bgw']['wfng_dk2'] = 0.37 + self.qshift[1]*self.kpoints[1]
+                self.sections['input_pw2bgw']['wfng_dk3'] = 0.32 + self.qshift[2]*self.kpoints[2]
+            else:
+                self.sections['input_pw2bgw']['wfng_dk1'] = self.qshift[0]*self.kpoints[0]
+                self.sections['input_pw2bgw']['wfng_dk2'] = self.qshift[1]*self.kpoints[1]
+                self.sections['input_pw2bgw']['wfng_dk3'] = self.qshift[2]*self.kpoints[2]
+
+    def __str__(self):
+        out = []
+        def to_str(v):
+            if isinstance(v, six.string_types):
+                return "'%s'" % v
+            return v
+
+        for k1 in ['input_pw2bgw']:
+            v1 = self.sections[k1]
+            out.append("&%s" % k1.upper())
+            sub = []
+            for k2 in sorted(v1.keys()):
+                sub.append("   %s = %s" % (k2, to_str(v1[k2])))
+            sub.append("/")
+            out.append(",\n".join(sub))
+        return "\n".join(out)
+
+    def write_input(self, filename):
+        '''
+        Write the PW2BGW input file.
+
+        Args:
+            filename (str): The string filename to output to.
+        '''
+        with open(filename, 'w') as fout:
+            fout.write(self.__str__()+"\n")
 
 
+
+'''
 if __name__ == "__main__":
     o = PWOutput("../../test_files/Si.pwscf.out")
     print(o.data)
     print(o.final_energy)
+'''
