@@ -129,7 +129,7 @@ for icut in range(cut_min,cut_max_plus,cut_incr):
     eps_inp[i].number_bands = number_bands
     nbnds.append(number_bands)
     namei="Epsilon Task {}".format(i)
-    eps_fw[i] = BgwFirework(eps_inp[i], name=namei, complex=cmplx_bool)
+    eps_fw[i] = BgwFirework(eps_inp[i], name=namei, complex=cmplx_bool, mpi_cmd=mpi_cmd)
     i=i+1
 
 num_eps_fw=i

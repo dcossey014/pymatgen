@@ -76,7 +76,7 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
         else:
             print("Error: No mpi_cmd given. "
                     "Please input an mpi_cmd for the job.  \n"
-                    "Usage: bgw_fw = BgwFirework(<bgw_task>, mpi_cmd: <mpi_cmd>, "
+                    "Usage: bgw_fw = BgwFirework(<bgw_task>, mpi_cmd=<mpi_cmd>, "
                     "name=<name>, complex='complex|real', config_file='config_file', "
                     "handlers=[handlers], handler_params={key: value}")
             sys.exit(1)
