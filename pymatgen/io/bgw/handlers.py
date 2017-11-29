@@ -67,7 +67,7 @@ class BgwErrorHandler(ErrorHandler):
 
         self.run_type = input_files[0].split('.')[0]
         self.bgwi = BgwInput.from_file(input_files[0])
-        self.output_filename = "OUT.{}".format(run_type[:3])
+        self.output_filename = "OUT.{}".format(self.run_type[:3])
 
     def check(self):
         '''
@@ -130,7 +130,7 @@ class BgwMemoryHandler(ErrorHandler):
         logger.debug("init for BgwMemoryHandler\nrun_type: {}".format(self.run_type))
         self.bgwi = BgwInput.from_file(input_files[0])
         self.errors = []
-        self.output_filename = "OUT.{}".format(run_type[:3])
+        self.output_filename = "OUT.{}".format(self.run_type[:3])
 
     def check(self):
         '''

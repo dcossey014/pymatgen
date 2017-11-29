@@ -1,0 +1,11 @@
+control:
+    pseudo_dir: '/app/ccm/PPs/ONCVPSP/QE'
+    tstress: True
+    tprnfor: True
+    verbosity: 'high'
+system:
+    ecutwfc: 20
+electrons:
+    conv_thr: 1.0e-10
+    diago_full_acc: True
+    diagonalization: 'cg'

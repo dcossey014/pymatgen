@@ -25,7 +25,7 @@ from monty.serialization import loadfn
 from pymongo import MongoClient
 
 from pymatgen import Structure
-from pymatgen.io.espresso.inputs import PWInput, PWInputError
+from pymatgen.io.espresso.inputs import PWInput, PwInputError
 from pymatgen.io.espresso.outputs import EspressoRun, PWOutput
 from pymatgen.io.bgw.outputs import BgwRun, BgwParserError
 from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, Workflow, LaunchPad

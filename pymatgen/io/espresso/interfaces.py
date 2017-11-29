@@ -7,7 +7,7 @@ from fireworks import Firework, FireTaskBase, FWAction, \
 from custodian import Custodian
 from pymatgen import Structure
 from pymatgen.io.bgw.kgrid import QeMeanFieldGrids, generate_kpath
-from pymatgen.io.espresso.inputs import PWInput, PW2BGWInput
+from pymatgen.io.espresso.inputs import PWInput, Pw2BgwInput
 from pymatgen.io.espresso.custodian_jobs import PWJob
 
 def load_class(mod, name):
@@ -21,17 +21,20 @@ class QeMeanFieldTask(FireTaskBase):
     '''
     Custodian Task for running Mean Field Calculations with 
     Quantum Espresso.
-    '''
-    required_params = ['structure', 'kpoints', 'pseudo_dir', 'mpi_cmd', 'qe_control', 
-                    'qe_system', 'qe_electrons', 'qe_pw2bgw', 'mf_tasks']
-    optional_params = ['kgrid_offset_type', 'qshift', 'fftw_grid', 
-                    'bgw_rev_off', 'log_cart_kpts', 'pw_cmd', 'pw2bgw_cmd',
-                    'bandstructure_kpoint_path', 'num_kpoints']
+    ''' 
+    required_params = ['structure', 'pseudo_dir', 'kpoints_coarse',
+                    'kpoints_fine', 'mpi_cmd', 'pw_cmd', 'pw2bgw_cmd',
+                    'mf_tasks']
+    optional_params = ['reduce_structure', 'bgw_rev_off', 'log_cart_kpts', 
+                    'pw_cmd', 'pw2bgw_cmd', 'bandstructure_kpoint_path', 
+                    'num_kpoints']
 
     def run_task(self, fw_spec):
 
         # set up directory structure in ./ESPRESSO and create inputs and links
         # and set up some class variables
+
+
         self.write_inputs()
 
         def run_qemf_task(qe_task):
@@ -169,7 +172,7 @@ class QeMeanFieldTask(FireTaskBase):
                 print 'qe_task_grid_offset_type = ', qe_task_grid_offset_type
                 qe_task_grid_qshift=qe_kgrids.grids[qe_task].qshift
                 print 'qe_task_grid_qshift = ', qe_task_grid_qshift
-                qe_pw2bgw_input = PW2BGWInput(self.structure, 
+                qe_pw2bgw_input = Pw2BgwInput(self.structure, 
                              pw2bgw_input=qe_task_pw2bgw, 
                              kpoints=qe_task_grid_kpoints,
                              k_offset=qe_task_grid_offset_type,

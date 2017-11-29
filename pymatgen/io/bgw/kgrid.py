@@ -110,16 +110,28 @@ class QeMeanFieldGrids(object):
     '''
     Docstring
     '''
-    def __init__(self, structure, kpoints=[5,5,5],
-            offset_type="Monkhorst-Pack",
-            qshift=[0.000, 0.000, 0.001],
-            fftw_grid=[0,0,0], bgw_rev_off=False,
-            log_cart_kpts=False):
+    def __init__(self, structure, kpoints_coarse=[4,4,4],
+            kpoints_fine=[8,8,8], offset_type="Monkhorst-Pack",
+            qshift=[0.000, 0.000, 0.001], fftw_grid=[8,8,8], 
+            bgw_rev_off=False, log_cart_kpts=False):
 
         self.structure = structure
-        self.kpoints = ( kpoints if isinstance(kpoints, dict) \
-                            else {'scf': kpoints, 'wfn': kpoints, 
-                                'wfn_co': kpoints, 'wfnq': kpoints})
+        print("in QEKG: kpoints_coarse: {}\n kpoints_fine: {}\noffset_type: {}\n".format(
+                kpoints_coarse, kpoints_fine, offset_type))
+        if isinstance(kpoints_coarse, dict):
+            self.kpoints = kpoints_coarse
+        else:
+            self.kpoints = {'scf': kpoints_coarse,
+                        'wfn': kpoints_coarse,
+                        'wfn_co': kpoints_coarse,
+                        'wfnq': kpoints_coarse}
+
+        if isinstance(kpoints_fine, dict):
+            self.kpoints.update(kpoints_fine)
+        else:
+            (self.kpoints['wfn_fi'],
+            self.kpoints['wfnq_fi']) = kpoints_fine, kpoints_fine
+
         self.offset_type = ( offset_type if isinstance(offset_type, dict) \
                             else {'scf': offset_type, 
                                 'wfn': offset_type, 'wfn_co': 'Gamma', 
@@ -135,10 +147,6 @@ class QeMeanFieldGrids(object):
         if 'wfn_co' not in self.kpoints.keys():
             self.kpoints['wfn_co'] = ( [ i for i in \
                         self.kpoints['wfn'] ] )
-        '''elif self.kpoints['wfn_co'] != self.kpoints['wfn']:
-            print("WFN_co and WFN kpoints must be equal")
-            print("Resetting WFN_co kpoints to WFN kpoints")
-            self.kpoints['wfn_co'] = [ i for i in self.kpoints['wfn'] ]'''
 
         if 'wfn_fi' not in self.kpoints.keys(): 
             self.kpoints['wfn_fi'] = ( [ int(i*2) for i in \
@@ -157,6 +165,17 @@ class QeMeanFieldGrids(object):
             print("WFNq_fi and WFN_fi kpoints must be equal")
             print("Resetting WFNq_fi kpoints to WFN_fi kpoints")
             self.kpoints['wfnq_fi'] = [ i for i in self.kpoints['wfn_fi'] ]
+
+        print("in QEKG: structure: {}".format(self.structure))
+
+    def generate_kgrids(self):
+        tasks = ['scf', 'wfn', 'wfn_co', 'wfnq', 'wfn_fi', 'wfnq_fi']
+        self.kgrids = {}
+        for i in tasks:
+            print("running kgrid task: {}".format(i))
+            self.kgrids[i] = self.generate_kgrid(qe_task=i)
+
+        return self.kgrids
 
 
     def generate_kgrid(self,qe_task='scf'):
@@ -201,6 +220,8 @@ class QeMeanFieldGrids(object):
             print "Unknown QE task in QeMeanFieldGrids"
             exit()
 
+        print("in QEKG: kpoints: {}\noffset_type: {}\nqshift: {}\n\n".format(
+                    kpoints, offset_type, qshift))
         self.grids[qe_task] = Kgrid(self.structure, kpoints=kpoints, offset_type=offset_type, 
                 qshift=qshift, fftw_grid=self.fftw_grid, bgw_rev_off=self.bgw_rev_off, 
                 log_cart_kpts=self.log_cart_kpts)
@@ -227,9 +248,8 @@ class Kgrid(object):
         self.log_cart_kpts = log_cart_kpts
 
     def write_input(self, filename):
-        prim_struct = self.structure.get_primitive_structure()
-        prim_lvs = prim_struct.lattice.matrix
-        prim_coords = prim_struct.cart_coords
+        lvs = self.structure.lattice.matrix
+        coords = self.structure.cart_coords
         if isinstance(self.offset_type, list):
             kgrid_offset = "{0:< 5.3f} {1:< 5.3f} {2:< 5.3f}\n".format(
                     self.offset_type[0], self.offset_type[1], 
@@ -242,7 +262,7 @@ class Kgrid(object):
         else:
             kgrid_offset = "{0:< 5.3f} {0:< 5.3f} {0:< 5.3f}\n".format(0.5)
 
-        element = Enum('Elem', ",".join(prim_struct.symbol_set).encode('ascii', 'ignore'))
+        element = Enum('Elem', ",".join(self.structure.symbol_set).encode('ascii', 'ignore'))
 
         with open(filename, 'w') as fout:
             fout.write("{:< 5} {:< 5} {:< 5}\n".format(self.kpoints[0], 
@@ -251,14 +271,14 @@ class Kgrid(object):
             fout.write("{:< 5} {:< 5} {:< 5}\n\n".format(self.qshift[0], 
                                     self.qshift[1], self.qshift[2]))
 
-            for lv in prim_lvs:
+            for lv in lvs:
                 fout.write("{:< 12.8f} {:< 12.8f} {:< 12.8f}\n".format(lv[0], 
                                                             lv[1], lv[2]))
-            fout.write("{}\n".format(prim_struct.num_sites))
+            fout.write("{}\n".format(self.structure.num_sites))
 
-            for i,el in enumerate(prim_struct.species):
+            for i,el in enumerate(self.structure.species):
                 fout.write("{} ".format(element[el.__str__()].value))
-                crds = prim_struct.cart_coords[i]
+                crds = coords[i]
                 fout.write("{:< 12.8f} {:< 12.8f} {:< 12.8f}\n".format(crds[0], 
                                                         crds[1], crds[2]))
 
@@ -286,16 +306,20 @@ class Kgrid(object):
         p = subprocess.Popen([kgrid_exec, basename+'.in', basename+'.out', basename+'.log'])
         p.wait()
 
+        '''
         with open(basename+'.out', 'r') as fin:
             kpoint_grid = fin.readlines()
         rm_line = kpoint_grid.pop(0)
         kpoint_grid[-1] = kpoint_grid[-1].rstrip()
 
         return kpoint_grid
+        '''
+
+        return self.from_file(basename+'.out')
 
     @classmethod
     def from_file(self, filename):
         with open(filename, 'r') as fin:
-            kpoint_grid = fin.readlines()
-            kpoint_grid[-1] = kpoint_grid[-1].rstrip()
-        return kpoint_grid[2:]
+            lines = fin.readlines()
+        kpoint_grid = [[float(k) for k in i.strip().split()] for i in lines[2:]]
+        return kpoint_grid

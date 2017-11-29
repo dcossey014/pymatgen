@@ -1,0 +1,35 @@
+&CONTROL
+  calculation = 'scf',
+  prefix = 'GaAs',
+  pseudo_dir = '/app/ccm/PPs/ONCVPSP/QE',
+  tprnfor = True,
+  tstress = True,
+  verbosity = 'high',
+/
+&SYSTEM
+  ecutwfc = 30,
+  ibrav = 0,
+  nat = 2,
+  ntyp = 2,
+/
+&ELECTRONS
+  conv_thr = 1e-10,
+  diago_full_acc = True,
+  diagonalization = 'cg',
+/
+&IONS
+/
+&CELL
+/
+ATOMIC_SPECIES
+  As 74.9216 As_ONCV_PBE-1.1.upf
+  Ga 69.7230 Ga_ONCV_PBE-1.0.upf
+ATOMIC_POSITIONS crystal
+  Ga 0.000000 0.000000 0.000000
+  As 0.250000 0.250000 0.250000
+K_POINTS automatic
+  8 8 8 0.5 0.5 0.5
+CELL_PARAMETERS angstrom
+    3.461129   0.000000   1.998284
+    1.153710   3.263184   1.998284
+    0.000000   0.000000   3.996568

@@ -28,9 +28,400 @@ from monty.json import MSONable
 from monty.serialization import loadfn
 
 from pymatgen import Structure
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
 from copy import deepcopy as dcopy
 from monty.re import regrep
 from collections import defaultdict, OrderedDict
+
+
+class PwInput(MSONable):
+    '''
+    Base input file class for Quantum Espresso pw.x
+    '''
+
+    def __init__(self, structure, pseudo_dir=None, control={'calculation': 'scf'}, 
+                system={}, electrons={}, ions={}, cell={}, kpoints_mode='automatic', 
+                kpoints_grid=[1,1,1], kpoints_shift=[0,0,0], qshift=[0,0,0], 
+                convert_to_primitive_structure=False, config_file=None):
+        """
+        Initializes a PWSCF input file for using pw.x in QuantumEspresso.
+
+        Args:
+            structure (Structure):  Input Structure
+            pseudo_dir (str):  String of the directory containing pseudopotential 
+                    files.
+            control (dict):  Control parameters. Refer to official PWSCF doc
+                    on supported parameters. Default to {"calculation": "scf"}
+            system (dict):  System parameters. Refer to official PWSCF doc
+                    on supported parameters. Default to None, ( {} ).
+            electrons (dict):  Electron parameters. Refer to official PWSCF doc
+                    on supported parameters. Default to None, ( {} ).
+            ions (dict):  Ions parameters. Refer to official PWSCF doc
+                    on supported parameters. Default to None, ( {} ).
+            cell (dict):  Cell parameters. Refer to official PWSCF doc
+                    on supported parameters. Default to None, ( {} ).
+            kpoints_mode (str):  Kpoints generation mode. Default to 'automatic'.
+            kpoints_grid (list):  The kpoint grid. Default to [1, 1, 1].
+            kpoints_shift (list):  The shift for the kpoints. Defaults to
+                    [0,0,0].
+            convert_to_primitive_structure (bool):  If True, structure will be
+                    converted to its reduced primitive structure.
+            config_file (str):  Configuration file from which to pull user default
+                    values for control, system, electrons, and ions.  Default is 
+                    to look for specified file in User's HOME directory but will 
+                    also accept absolute paths for alternative locations.
+        """
+
+        # Check for Configuration Defaults File and apply those changes.
+        if config_file and os.path.isabs(config_file):
+            config_dict = loadfn(config_file)
+        elif config_file:
+            fpath = os.path.join(os.environ['HOME'], config_file)
+            config_dict = loadfn(fpath)
+        elif os.path.exists(os.path.join(os.environ['HOME'],
+                    'espresso_interface_defaults.yaml')):
+            fpath = os.path.join(os.environ['HOME'], 'espresso_interface_defaults.yaml')
+            config_dict = loadfn(fpath)
+        else:
+            config_dict = {}
+
+        (self.__dict__['control'],
+            self.__dict__['system'],
+            self.__dict__['electrons'],
+            self.__dict__['ions'],
+            self.__dict__['cell']) = {'calculation': 'scf'}, {}, {}, {}, {}
+
+        # Set Defaults from File
+        if config_dict:
+            if 'control' in config_dict.keys():
+                self.__dict__['control'].update(config_dict['control'])
+            if 'system' in config_dict.keys():
+                self.__dict__['system'].update(config_dict['system'])
+            if 'electrons' in config_dict.keys():
+                self.__dict__['electrons'].update(config_dict['electrons'])
+            if 'ions' in config_dict.keys():
+                self.__dict__['ions'].update(config_dict['ions'])
+            if 'cell' in config_dict.keys():
+                self.__dict__['cell'].update(config_dict['cell'])
+
+        # Override Defaults with User Supplied Values
+        self.__dict__['structure'] = structure
+        self.__dict__['control'].update(control if control else {})
+        self.__dict__['system'].update(system if system else {})
+        self.__dict__['electrons'].update(electrons if electrons else {})
+        self.__dict__['ions'].update(ions if ions else {})
+        self.__dict__['cell'].update(cell if cell else {})
+        self.__dict__['kpoints_mode'] = kpoints_mode.lower() 
+        self.__dict__['kpoints_grid'] = kpoints_grid
+        self.__dict__['kpoints_shift'] = kpoints_shift
+        self.__dict__['convert_to_primitive_structure'] = convert_to_primitive_structure 
+
+        # If using reduced primite Structure, set that before moving forward
+        if self.convert_to_primitive_structure:
+            self.__dict__['structure'] = self.convert2primitive(self.structure)
+
+        # Set prefix name automatically
+        formula_prefix = self.structure.composition.reduced_formula
+        self.control['prefix'] = formula_prefix
+        
+        # Overwrite PseudoPotential Directory from Deafults File if User supplied
+        # one during the initialization of the class.
+        if pseudo_dir:
+            self.__dict__['control']['pseudo_dir'] = pseudo_dir
+
+        # Set dictionary for Atom types to use particular pseudopotential files.
+        # might want to have some user override on this maybe?
+        #print("pseudo_dir: {}".format(self.control['pseudo_dir']))
+        def either(c):
+            return '[%s%s]'%(c.lower(),c.upper()) if c.isalpha() else c
+        self.__dict__['pseudo'] = {}
+        for i in self.structure.symbol_set:
+            pattern="{}/{}_*.UPF".format(self.control['pseudo_dir'],i)
+            new_pattern=''.join(either(char) for char in pattern)
+            pps=glob.glob(new_pattern)
+            self.pseudo[i.encode('ascii', 'ignore')] = pps[-1].split('/')[-1]
+        #print("pseudo: {}".format(self.pesudo))
+
+    def convert2primitive(s):
+        finder = SpacegroupAnalyzer(s)
+        return finder.get_primitive_standard_structure()
+
+    def __str__(self):
+        out = []
+        def to_str(v):
+            if isinstance(v, six.string_types):
+                return "'{}'".format(v)
+            return v
+        for k1 in ["control", "system", "electrons", "ions", "cell"]:
+            v1 = self.__dict__[k1]
+            out.append("&{}".format(k1.upper()) )
+            sub = []
+            for k2 in sorted(v1.keys()):
+                sub.append("  {} = {}".format(k2, to_str(v1[k2])) )
+            if k1 == "system":
+                sub.append("  ibrav = 0")
+                sub.append("  nat = {}".format(len(self.structure)) )
+                sub.append("  ntyp = {}".format(len(self.structure.composition)) )
+            sub.append("/")
+            out.append(",\n".join(sub) )
+
+        out.append("ATOMIC_SPECIES")
+        for k, v in self.structure.composition.items():
+            out.append("  {:2} {:.4f} {}".format(k.symbol, k.atomic_mass,
+                                         self.pseudo[k.symbol]) )
+        out.append("ATOMIC_POSITIONS crystal")
+        for site in self.structure:
+            out.append("  {:2} {:.6f} {:.6f} {:.6f}".format(site.specie.symbol, site.a,
+                                                site.b, site.c) )
+        out.append("K_POINTS {}".format(self.kpoints_mode) )
+        if self.kpoints_mode == 'automatic':
+            kpt_str = ["{}".format(i) for i in self.kpoints_grid ]
+            kpt_str.extend(["{}".format(i) for i in self.kpoints_shift] )
+            out.append("  {}".format(" ".join(kpt_str)) )
+        elif self.kpoints_mode == 'crystal':
+            #out.append("%s" % i for i in self.kpoints_grid)
+            #self.kpoints_grid[-1]=self.kpoints_grid[-1].rstrip()
+            #out.append("".join(self.kpoints_grid))
+            out.append("  {}".format(len(kpoints_grid)))
+            out.extend(['{:16.9F} {:14.9F} {:14.9F} {:3.1F}'.format(
+                        k[0], k[1], k[2], k[3]) for k in kpoints_grid] )
+        out.append("CELL_PARAMETERS angstrom")
+        for vec in self.structure.lattice.matrix:
+            out.append("  {:10.6f} {:10.6f} {:10.6f}".format(vec[0], vec[1], vec[2]))
+        return "\n".join(out)
+
+
+    def to_file(self, filename='in'):
+        """
+        Write the PWSCF input file.
+
+        Args:
+            filename (str): The string filename to output to.
+        """
+        with open(filename, "w") as f:
+            f.write(self.__str__()+"\n")
+
+
+    @classmethod
+    def from_file(cls, filename):
+        sections = {}
+        heading = 'none'
+        headers = ['ATOMIC_SPECIES', 'ATOMIC_POSITIONS', 'K_POINTS', 
+                   'CELL_PARAMETERS', 'CONSTRAINTS', 'OCCUPATIONS', 
+                   'ATOMIC_FORCES']
+        to_remove = ['ibrav', 'nat', 'ntyp']
+
+        def parse_kv(k, v):
+            if 'true' in v.lower():
+                return (k, True)
+            elif 'false' in v.lower():
+                return (k, False)
+            try:
+                val = float(v)
+                if val.is_integer():
+                    return (k, int(val))
+                else:
+                    return (k, val)
+            except ValueError:
+                if v.find('True') != -1:
+                    return (k, True)
+                elif v.find('False') != -1:
+                    return (k, False)
+                else:
+                    return (k, v)
+            
+
+        def complete_subgroup(heading):
+            if 'ATOMIC_SPECIES' in heading:
+                global pseudo
+                atom_pseudo = dcopy(sub)
+                pseudo = {}
+                for ppf in atom_pseudo:
+                    pseudo[ppf[0]] = ppf[-1]
+            if 'ATOMIC_POSITIONS' in heading:
+                global species
+                global coords
+                atoms = dcopy(sub)
+                species = [a[0] for a in atoms]
+                coords = [[float(a[1]), float(a[2]), float(a[3])] for a in atoms]
+            if 'K_POINTS' in heading:
+                global kpoints
+                global kpoints_shift
+                kpt = dcopy(sub)
+                #print("kpt: {}".format(kpt))
+                if kpoints_mode == 'crystal':
+                    kpoints = []
+                    #kpoints.append('{:>5}\n'.format(kpt[0][0]))
+                    kpoints.extend(['  {:11}  {:11}  {:11}   {:3}\n'.format(
+                                     k[0], k[1], k[2], k[3]) for k in kpt[1:]] 
+                                  )
+                    kpoints_shift=None
+                elif kpoints_mode == 'automatic':
+                    kpoints = [int(k) for k in kpt[0][:3]]
+                    kpoints_shift = [int(k) if type(k) is int else float(k) 
+                            for k in kpt[0][3:]]
+                #print("kps: {}".format(kpoints))
+                #print("kps_shift: {}".format(kpoints_shift))
+            
+
+            if 'CELL_PARAMETERS' in heading:
+                global lattice
+                cell = dcopy(sub)
+                lattice = [[float(v) for v in v1] for v1 in cell]
+            if 'CONSTRAINTS' in heading:
+                global constraints
+                constraints = dcopy(sub)
+
+        with open(filename, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            l = line.strip().replace("'", '').replace(',', '')
+            #print("l: {}".format(l))
+            if '&' in l:
+                section = l[1:].lower()
+                sections[section] = {}
+                continue
+
+            l = l.split()
+            #print("key: {}\t\tVal: {}".format(l[0], l[-1]))
+            #print("{}".format(l[-1].lower()))
+            if l[0] in headers:
+                if 'K_POINTS' in l[0]:
+                    kpoints_mode = l[-1].strip()
+                if heading != 'none':
+                    complete_subgroup(heading) 
+                heading = l[0]
+                sub = []
+                continue
+
+            if heading != 'none':
+                sub.append([w for w in l])
+            elif l[0] != '/':
+                k,v = parse_kv(l[0], l[-1].replace(',',''))
+                sections[section][k] = v
+            """elif 'true' in l[-1].lower():
+                print("under true heading\n\n")
+                sections[section][l[0]] = True
+            elif 'false' in l[-1].lower():
+                print("under false heading\n\n")
+                sections[section][l[0]] = False
+            elif l[0] != '/' and l[0] != 'pseudo_dir':
+                print("under non pseudo heading\n\n")
+                sections[section][l[0]] = (l[-1].replace("'",'').replace(',', '')) 
+            elif l[0] != '/':
+                print("under other heading\n\n")
+                sections[section][l[0]] = l[-1][1:-2]"""
+        complete_subgroup(heading)
+        sections['system'] = {k:v for k,v in sections['system'].items()
+                                if k not in to_remove}
+        
+        structure = Structure(lattice, species, coords)
+        pseudo_dir=sections['control']['pseudo_dir']
+        return PwInput(structure, pseudo_dir=pseudo_dir, control=sections['control'], 
+                        system=sections['system'], electrons=sections['electrons'], 
+                        ions=sections['ions'], cell=sections['cell'],
+                        kpoints_mode=kpoints_mode, kpoints_grid=kpoints, 
+                        kpoints_shift=kpoints_shift)
+
+
+class QeMFInput(MSONable):
+    '''
+    Class for creating multiple input files for Quantum Espresso.  This class
+    utilizes PwInput class for creating input files.
+    '''
+    def __init__(self, structure, pseudo_dir=None, kpoints_coarse=[1,1,1], 
+                kpoints_fine=[4,4,4], kpoint_shift=[1,1,1], tasks=['scf', 'wfn'],
+                reduce_structure=False, config_file=None):
+        """
+        Initializes multiple PWSCF input files for use in WorkFlows 
+        using pw.x in QuantumEspresso.
+
+        Args:
+            structure (Structure):  Input Structure
+            pseudo_dir (str):       String of the directory containing pseudopotential 
+                                    files.
+            kpoints_coarse (list/dict):The kpoint grid for coarse grid. Can also be a 
+                                    dict with different settings for each task.
+                                    Default to [1,1,1].
+            kpoints_fine (list/dict):The kpoint grid for fine grid. Can also be a 
+                                    dict with different settings for each task.
+                                    Defaults to [4,4,4].
+            tasks (list):           List of PWSCF tasks to create input files.
+                                    Default to ['scf', 'wfn'].
+            reduce_structure (bool):If True, structure will be converted to its 
+                                    reduced primitive structure.
+            config_file (str):  Configuration file from which to pull user default
+                                values for control, system, electrons, and ions.  Default is 
+                                to look for specified file in User's HOME directory but will 
+                                also accept absolute paths for alternative locations.
+        """
+        # Initialize attributes that are needed for other member functions.
+        self.structure = structure
+        self.tasks = tasks
+
+        # Create Input Files for list of Tasks
+        for i in tasks:
+            if 'fi' in i:
+                if isinstance(kpoint_fine, dict):
+                    kps = kpoints_fine[i]
+                else:
+                    kps = kpoint_fine
+                if isinstance(kps[0], list):
+                    kp_mode = 'crystal'
+                else:
+                    kp_mode = 'automatic'
+
+                kp_shift = [1,1,1]
+            else:
+                if isinstance(kpoint_coarse, dict):
+                    kps = kpoints_coarse[i]
+                else:
+                    kps = kpoint_coarse
+                if isinstance(kps[0], list):
+                    kp_mode = 'crystal'
+                else:
+                    kp_mode = 'automatic'
+                kp_shift = [1, 1, 1]
+
+                if 'co' in i:
+                    kp_shift = [0, 0, 0]
+
+            if 'wfn' in i:
+                control = {'calculation': 'bands'}
+            else:
+                control = {'calculation': i}
+            
+            setattr(self, i, PwInput(structure, pseudo_dir=pseudo_dir, 
+                                control=control, kpoints_mode=kp_mode,
+                                kpoints_grid=kps, kpoints_shift=kp_shift,
+                                qshift=qshift, 
+                                convert_to_primitive_structure=convert_to_primitive_structure,
+                                config_file=config_file) )
+
+    def to_file(self):
+        # Create Directory and sub directories for input files
+        if not os.path.exists('./ESPRESSO'):
+            os.mkdir('./ESPRESSO')
+        os.chdir('./ESPRESSO')
+        
+        for i in tasks:
+            # Create directory for input file
+            if not os.path.exists(i):
+                os.mkdir(i)
+            else:
+                print("Directory already exists, input files might be overwritten.")
+            os.chdir(i)
+            
+            # Write Input File
+            fin = getattr(self, i)
+            fin.to_file('in')
+
+            # Move up a Directory to prepare for next input file
+            os.chdir('../')
+
+        # Move back to original directory
+        os.chdir('../')
 
 
 class PWInput(object):
@@ -270,7 +661,17 @@ class PWInput(object):
                         kpoints_shift=kpoints_shift)
 
 
-class PWInputError(BaseException):
+class QeMeanFieldInput(MSONable):
+    """
+    Docstring
+    """
+    def __init__(self, structure, pseudo_dir, kps_co, kps_fi, 
+                qshift, mf_tasks, cmplx_real='complex', 
+                config_file=None, convert_to_primitive_structure=False):
+        pass
+                
+
+class PwInputError(BaseException):
     pass
 
 
@@ -304,7 +705,7 @@ class PwBandsInput(PwPpInput):
     def write_input(self, filename):
         pass
 
-class PW2BGWInput(object):
+class Pw2BgwInput(object):
     '''
     Base Input file Class for PW2BGW post-processing.
     '''

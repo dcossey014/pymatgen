@@ -7,7 +7,7 @@ __email__ = 'dcossey014@gmail.com; gary.kedziora@engilitycorp.com'
 __date__ = '10/17/17'
 
 
-import os
+import os, re
 import sys 
 import six 
 import glob
@@ -149,10 +149,23 @@ class BgwCustodianTask(FireTaskBase):
         c = Custodian(handlers=handlers, validators=[], jobs=[job], monitor_freq=3)
         output = c.run()
         print("output returned from Custodian: {}".format(output))
+
+        #TODO: Check this code to make sure it works.
+        # Attempt to prevent multiple epsilon/sigma jobs from overwriting each
+        # other
+        fw = Firework.from_file('FW.json')
+        name = fw.name
+        m = re.match("[\w\s]+(\d)$", name)
+        if m.groups():
+            n_val = "-{}".format(m.group(1))
+        else:
+            n_val = ""
+
         return FWAction(stored_data=output[0], mod_spec=[{'_set': {
                 #'PREV_DIRS': prev_dirs,
-                'PREV_DIRS->BGW->{}'.format(os.path.basename(self.get(
-                                'bgw_cmd')).split('.')[0]): os.getcwd()}}])
+                'PREV_DIRS->BGW->{}{}'.format(os.path.basename(self.get(
+                                'bgw_cmd')).split('.')[0], n_val): 
+                                os.getcwd()}}])
 
 
 @explicit_serialize
