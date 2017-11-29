@@ -1,6 +1,6 @@
 from __future__ import division, unicode_literals, print_function
 
-import os
+import os, json
 import glob
 import re
 import math
@@ -8,8 +8,10 @@ import itertools
 from io import StringIO
 import logging
 from collections import defaultdict
+import pprint
 import xml.etree.cElementTree as ET
 import warnings
+import cPickle as pickle
 
 from six.moves import map, zip
 from six import string_types
@@ -29,13 +31,14 @@ from pymatgen.core.periodic_table import Element
 from pymatgen.electronic_structure.bandstructure import Spin, BandStructureSymmLine
 from pymatgen.electronic_structure.plotter import BSPlotter
 from pymatgen.io.bgw.kgrid import Generate_Kpath
+from pymatgen.io.bgw.inputs import BgwInput
 from monty.json import MSONable
 
 logger = logging.getLogger(__name__)
 
 class XmlListConfig(list):
     def __init__(self, aList):
-        logger.debug("aList: {}".format(aList))
+        #logger.debug("aList: {}".format(aList))
         for element in aList:
             if element:
                 # treat like dict
@@ -45,8 +48,8 @@ class XmlListConfig(list):
                 elif element[0].tag == element[1].tag:
                     self.append(XmlListConfig(element))
             if element.text:
-                logger.debug("printing text of element '{}': {}".format(
-                                        element, element.text.strip()))
+                #logger.debug("printing text of element '{}': {}".format(
+                                        #element, element.text.strip()))
                 text = element.text.strip()
                 if text:
                     self.append(text)
@@ -69,7 +72,7 @@ class XmlDictConfig(dict):
     And then use xmldict for what it is... a dict.
     '''
     def __init__(self, parent_element):
-        logger.debug("\n\n\nparent: {}".format(parent_element))
+        #logger.debug("\n\n\nparent: {}".format(parent_element))
         if parent_element.items():
             self.update(dict(parent_element.items()))
         for element in parent_element:
@@ -77,7 +80,8 @@ class XmlDictConfig(dict):
                     else element.tag.replace('.', '_') )
             #print("element: {}".format(element))
             if element.text:
-                logger.debug("text: {}\n\n".format(element.text.strip()))
+                #logger.debug("text: {}\n\n".format(element.text.strip()))
+                pass
             if element:
                 # treat like dict - we assume that if the first two tags
                 # in a series are different, then they are all different.
@@ -102,7 +106,7 @@ class XmlDictConfig(dict):
                 text = element.text.strip()
                 size = int(element.attrib.get('size', 1))
                 vtype = element.attrib.get('type', 'char')
-                logger.debug("text: {}\ntype: {}".format(text, vtype))
+                #logger.debug("text: {}\ntype: {}".format(text, vtype))
                 if 'columns' in element.attrib.keys():
                     if size > int(element.attrib['columns']):
                         cDict['VALUE'] = [i.split()
@@ -127,7 +131,7 @@ class XmlDictConfig(dict):
 
 
     def _parse_val(self, val, vtype):
-        logger.debug("\n\nval: {}\nvtype: {}".format(val, vtype))
+        #logger.debug("\n\nval: {}\nvtype: {}".format(val, vtype))
         if "int" in vtype:
             return int(val)
         if "char" in vtype:
@@ -331,21 +335,26 @@ class BgwRun(MSONable):
         self.timings = {}
         for i, line in enumerate(lines):
             line = line.strip()
-            if line.find("BerkeleyGW") == 0:
+            if line.find("BerkeleyGW branch") == 0:
+                logger.debug("parsing version: {}".format(line))
                 self._parse_version(line)
-            if line.find("version  Run") != -1:
+            if line.find("version, run") != -1:
+                logger.debug("parsing runtype: {}".format(line))
                 self._parse_runtype(line) 
             if "MB per PE" in line:
                 self._parse_memory(line) 
             if "grid)" in line:
                 self._parse_band_info(line) 
-            if "CPU [s]" in line:
+            if "CPU (s)" in line:
                 self._parse_timings(i, lines) 
-            if line.find("ndiag") == 0:
+            if line.find("number of bands") == 0:
                 self.num_bands = int(line.split()[-1])
 
+            if "Sigma" in self.runtype and "Number of bands" in line:
+                    self.sigma_bands_calulated = int(line.split()[-1])
+
             if "Sigma" in self.runtype and "Symmetrized values" in line:
-                    self._parse_sigma_band_avg(i, self.num_bands, lines) 
+                    self._parse_sigma_band_avg(i, self.sigma_bands_calulated, lines) 
 
         if "Sigma" in self.runtype:
             self._parse_ch_convergence() 
@@ -364,16 +373,19 @@ class BgwRun(MSONable):
         l = stream.strip()
         if l.find("Memory available:") != -1: 
             self.mem_avail = float(l.split()[-4])
-            logger.debug('setting available memory: mem_avail: {}'.format(
-                            self.mem_avail))
+            #logger.debug('setting available memory: mem_avail: {}'.format(
+            #                self.mem_avail))
         else:
             self.mem_req += float(l.split()[-4])
-            logger.debug('setting memory required: {}'.format(self.mem_req))
+            #logger.debug('setting memory required: {}'.format(self.mem_req))
 
     def _parse_runtype(self, stream):
         l = stream.split()
+        print("In _parse_runtype: {}".format(l))
+        logger.debug("In _parse_runtype: {}".format(l))
         self.runtype = l[0]
-        self.cmplx_real = l[1]
+        self.cmplx_real = l[2]
+        logger.debug("complx/real: {}".format(self.cmplx_real))
         if "Sigma" in self.runtype:
             self.band_avgs = {} 
 
@@ -400,13 +412,18 @@ class BgwRun(MSONable):
             self.fermi_nrg, self.fermi_units = (l[-2], l[-1])
 
     def _parse_sigma_band_avg(self, i, j, stream):
+        logger.debug("in Sig Band AVg: i: {}\tj: {}".format(i,j))
+        logger.debug("parsing kpt: {}".format(stream[i+2]))
         kpt = stream[i+2].strip().split()[2:5]
         kpt = [k.replace('.', ',') for k in kpt]
         kpt_str = '   '.join(kpt)
+        logger.debug("kpt string: {}".format(kpt_str))
         key = stream[i+4].strip().split()
+        logger.debug("Key: {}".format(key))
         d = {}
         for line in stream[i+5 : i+j+5 ]:
             l = line.strip().split()
+            logger.debug("parsing values: {}".format(l))
             d[l[0]] = {val: l[k] for k,val in enumerate(key)
                     if k != 0}
         self.band_data[kpt_str] = d
@@ -492,12 +509,15 @@ class BgwRun(MSONable):
                
         return {self.runtype: d}
 
+    def to_file(self, filename):
+        with open(filename, 'w') as fout:
+            pprint.pprint(self.as_dict(), fout, indent=1 )
 
     def _parse_ch_convergence(self):
         i = 1
         self.ch_convergence, d = {}, {}
 
-        with open('ch_converge.dat') as fin:
+        with open(os.path.join(self.dirname, 'ch_converge.dat')) as fin:
             for line in fin.readlines():
                 l = line.strip().split()
                 if "# k =" in line:
@@ -511,7 +531,7 @@ class BgwRun(MSONable):
                     d = {}
                     name = "k-point_{}".format(i)
                     d[name] = {}
-                    d[name]['K-POINT'] = ' '.join(l[-5:-2])
+                    d[name]['K-POINT'] = ' '.join(l[-4:-3])
                     d[name]['UNITS'] = 'eV'
 
                     # Reset Data List for new K-point

@@ -7,7 +7,7 @@ __email__ = 'dcossey014@gmail.com; gary.kedziora@engilitycorp.com'
 __date__ = '3/09/16'
 
 
-import os
+import os, re
 import sys 
 import six 
 import glob
@@ -57,8 +57,8 @@ class BGWJob(Job):
 
     def run(self):
         cmd=list(self.bgw_cmd)
-        print "in BGWJob.run, cmd = ", cmd
-        logger.debug("in BGWJob.run, cmd = ", cmd)
+        print("in BGWJob.run, cmd = {}".format(cmd))
+        logger.debug("in BGWJob.run, cmd = {}".format(cmd))
         with open(self.output_file, 'w') as f:
             p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
         return p
@@ -74,7 +74,7 @@ class BGWJob(Job):
             cmd = self.pp_cmd.split() if isinstance(self.pp_cmd,
                         (str, unicode)) else list(self.pp_cmd)
             #print "running PostProcessing with: ", cmd
-            logger.debug("running PostProcessing with: ", cmd)
+            logger.debug("running PostProcessing with: {}".format(cmd))
             with open("pp.out", 'w') as f:                
                 p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
             p.wait()
@@ -150,10 +150,20 @@ class BgwCustodianTask(FireTaskBase):
         c = Custodian(handlers=handlers, validators=[], jobs=[job], monitor_freq=3)
         output = c.run()
         print("output returned from Custodian: {}".format(output))
+
+        # Need to find a way to not make this overwrite previous runs.
+        fw = Firework.from_file('FW.json')
+        name = fw.name
+        m = re.match("[\w\s]+(\d)$", name)
+        if m:
+            n_val = "-{}".format(m.group(1))
+        else:
+            n_val = ""
         return FWAction(stored_data=output[0], mod_spec=[{'_set': {
                 #'PREV_DIRS': prev_dirs,
-                'PREV_DIRS->BGW->{}'.format(os.path.basename(self.get(
-                                'bgw_cmd')).split('.')[0]): os.getcwd()}}])
+                'PREV_DIRS->BGW->{}{}'.format(os.path.basename(self.get(
+                                'bgw_cmd')).split('.')[0], 
+                                n_val): os.getcwd()}}])
 
 
 @explicit_serialize
@@ -162,6 +172,10 @@ class BgwDB(FireTaskBase):
     optional_params = ['insert_to_db']
 
     def run_task(self, fw_spec):
+        FORMAT = "%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - \n\t\t%(message)s\n"
+        logging.basicConfig(filename="bgw.log", level=logging.DEBUG, format=FORMAT)
+        logger = logging.getLogger(__name__)
+
         self.db_config = loadfn(os.path.join(os.environ['HOME'], self.get('config_file')))
         self.upload = self.get('insert_to_db', False)
         self.database = self.db_config.get('database', 'BGW_DATA')
@@ -177,8 +191,12 @@ class BgwDB(FireTaskBase):
 
         if self.esp_dir:
             self.esp_data = EspressoRun(self.esp_dir)
+
+        j = None
         if self.bgw_dirs:
             for i in self.bgw_dirs:
+                if i != j:
+                    j = i
                 setattr(self, i, BgwRun(self.bgw_dirs[i]))
 
         # Upload to MongoDB or return a PrettyPrint Dictionary
@@ -188,37 +206,13 @@ class BgwDB(FireTaskBase):
             pp = pprint.PrettyPrinter(indent=2)
             pp.pprint(self.get_dict())
 
-    '''
-    def get_dict(self, esp_dir, bgw_dirs):
-        esp_data = EspressoRun(esp_dir)
-        d = {}
-        for i,r in enumerate(bgw_dirs):
-            out_file = glob.glob(os.path.join(bgw_dirs[r], "OUT.*"))
-
-            if len(out_file) > 1:
-                raise BgwParserError(
-                        "Found more than one output file for "
-                        "Runtype: {}".format(tmp_out.runtype),
-                        {'err': 'Duplicate Run', 'file': out_file[-1]} )
-
-            tmp_out = BgwRun(out_file[0])
-            
-            if tmp_out.runtype not in d.keys() and tmp_out.timings:
-                d.update(tmp_out.as_dict())
-
-            elif tmp_out.runtype in d.keys():
-                raise BgwParserError(
-                        "Found more than one output file for "
-                        "Runtype: {}".format(tmp_out.runtype),
-                        {'err': 'Duplicate Run', 'file': r} )
-            else:
-                raise BgwParserError(
-                        "Could not parse timings.  Make sure the run "
-                        "completed successfully.",
-                        {'err': 'Incomplete Run'} )
-        
-        return (d, esp_data.as_dict())
-    '''
+    def check_db_duplicates(self):
+        self.structure = self.esp_data.structure
+        prim_structure = self.structure.get_primitive_structure()
+        query_dict = { }
+        query = self.collection.find("")
+        count = query.count()
+        pass
 
     def insert_db(self, run_data):
         connection = MongoClient(self.db_config['host'], self.db_config['port'],

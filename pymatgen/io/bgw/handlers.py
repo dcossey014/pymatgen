@@ -15,7 +15,7 @@ __date__ = "7/01/17"
 
 import math
 import logging
-import os, glob
+import os, glob, datetime
 
 from fireworks import LaunchPad, Firework
 from custodian.custodian import ErrorHandler
@@ -118,8 +118,7 @@ class BgwErrorHandler(ErrorHandler):
     is_monitor = True
 
     error_msgs = {
-                'error':    ['MPT ERROR', 'ERROR'
-                            ]
+                'MPT Error':    ['MPT ERROR', 'ERROR']
                 }
 
     #TODO: Fix runtype with glob
@@ -146,9 +145,9 @@ class BgwErrorHandler(ErrorHandler):
             print("Could not find an input file.")
             raise NameError("Could not find an input file.")
 
-        self.run_type = input_files[0].split()[0]
-        self.bgwi = BGWInput.from_file(input_files[0])
-        self.output_filename = "OUT.{}".format(run_type[:3])
+        self.run_type = input_files[0].split('.')[0]
+        self.bgwi = BgwInput.from_file(input_files[0])
+        self.output_filename = "OUT.{}".format(self.run_type[:3])
 
     def check(self):
         '''
@@ -157,7 +156,7 @@ class BgwErrorHandler(ErrorHandler):
 
         self.errors = set()
         with open(self.output_filename, 'r') as fout:
-            for line in f:
+            for line in fout:
                 l = line.strip()
                 for err, msgs in BgwErrorHandler.error_msgs.items():
                     for msg in msgs:
@@ -169,7 +168,7 @@ class BgwErrorHandler(ErrorHandler):
         backup(BGW_BACKUP_FILES)
         actions = []
 
-        return {"errors": self.errors, "actions": actions}
+        return {"errors": list(self.errors), "actions": actions}
 
     def __str__(self):
         return "BgwErrorHandler"
@@ -188,13 +187,10 @@ class BgwMemoryHandler(ErrorHandler):
         Initializes with an output file name.
 
         Args:
-            output_filename (str): This is the file where the stdout for nwchem
-                is being redirected. The error messages that are checked are
-                present in the stdout. Defaults to "mol.nwout", which is the
-                default redirect used by :class:`custodian.nwchem.jobs
-                .NwchemJob`.
+            None
         """
         logger = logging.getLogger(__name__)
+        logger.info("Inside INIT of BgwMemoryHandler")
 
         input_files = glob.glob("*.inp")
         if len(input_files) > 1:
@@ -207,11 +203,11 @@ class BgwMemoryHandler(ErrorHandler):
             print("Could not find an input file.")
             raise NameError("Could not find an input file.")
 
-        self.run_type = input_files[0].split()[0]
+        self.run_type = input_files[0].split('.')[0]
         logger.debug("init for BgwMemoryHandler\nrun_type: {}".format(self.run_type))
         self.bgwi = BgwInput.from_file(input_files[0])
         self.errors = []
-        self.output_filename = "OUT.{}".format(run_type[:3])
+        self.output_filename = "OUT.{}".format(self.run_type[:3])
 
     def check(self):
         '''
@@ -306,7 +302,7 @@ class BgwMemoryHandler(ErrorHandler):
                 action.append({"_set": {"_tasks.{}.mpi_cmd".format(i): new_mpi}})
                     
         BgwModder().apply_actions(actions)
-        return {"errors": self.errors, "actions": action}
+        return {"errors": list(self.errors), "actions": action}
 
     def __str__(self):
         return "BgwMemoryErrorHandler"

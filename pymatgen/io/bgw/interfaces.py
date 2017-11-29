@@ -53,7 +53,7 @@ gk:      ppx is not needed, since sigma writes eqp0.dat and eqp1.dat automatical
     
     def __init__(self, bgw_task, name="Bgw FW", bgw_cmd=None,
                 handlers=['BgwErrorHandler', 'BgwMemoryHandler',
-                'WalltimeErrorHandler'], mpi_cmd=None,
+                'WalltimeErrorHandler'], mpi_cmd=None, 
                 handler_params=None, ppx=None,
                 config_file=None, complex=False):
         #TODO: Fix BGW_cmd and handlers.  Correct OUT file configuration.
@@ -304,7 +304,8 @@ class BgwWorkflow():
     
         else:
             id = len(self.fws) - 2
-            self.dependency[self.fws[id]]=[fw_task.Firework]
+            self.dependency[self.fws[id]]=[fw_task if isinstance(fw_task,
+                    Firework) else fw_task.Firework]
         self.wf=Workflow(self.fws, self.dependency, name=self.name)
 
 

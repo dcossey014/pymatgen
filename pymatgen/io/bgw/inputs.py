@@ -11,14 +11,13 @@ import mmap, fnmatch, re, subprocess
 import copy as cp
 from bisect import bisect_left
 
-from pymatgen.io.bgw.kgrid import generate_kpath
+from pymatgen.io.bgw.kgrid import generate_kpath, Kgrid
 
 from monty.io import zopen
 from monty.dev import deprecated
 from monty.json import MSONable
 from monty.serialization import loadfn
 from collections import defaultdict, OrderedDict
-from pymatgen.io.bgw import Kgrid
 from fireworks import FireTaskBase, explicit_serialize, FWAction
 from pymatgen import Structure
 
@@ -42,6 +41,7 @@ class BgwInputTask(FireTaskBase):
                                 This is required for Epsilon calculations.
         mat_type (str)      :   Options: 'metal' or 'semiconductor'.  This is required
                                 for Epsilon calculations.
+        qemf_dir (str)      :   Directory to pull previous Espresso Run data
 
     '''
     
@@ -96,9 +96,9 @@ class BgwInputTask(FireTaskBase):
         out = []
         def write_kpoints():
             if not self.kps:
-                kp_dir = self.prev_dirs['ESPRESSO']['wfn']
+                kp_dir = self.prev_dirs['ESPRESSO']['wfn_co']
                 q_shift_dir = self.prev_dirs['ESPRESSO']['wfnq']
-                wfn_out = os.path.join(kp_dir, 'wfn.out')
+                wfn_out = os.path.join(kp_dir, 'wfn_co.out')
 
                 with open(os.path.join(q_shift_dir, 'wfnq.in'), 'r') as fin:
                     lines = fin.readlines()
@@ -115,8 +115,8 @@ class BgwInputTask(FireTaskBase):
             
             if self.run_type == 'epsilon':
                 self.kps[0] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0  {3}\n".format(
-                                qshift[0], qshift[1], qshift[2],
-                                qtype)
+                            qshift[0], qshift[1], qshift[2],
+                            qtype)
 
                 for i,j in enumerate(self.kps[1:], start=1):
                     k = j.split()
@@ -511,8 +511,14 @@ class BgwInputTask(FireTaskBase):
 
         self.dep_setup(self.filename)
         self.write_file(self.filename)
-        return FWAction(mod_spec=[{'_set': {
-            'PREV_DIRS': self.prev_dirs}}])
+        if not self.bgw_dirs:
+            return FWAction(mod_spec=[{'_set': {
+                'PREV_DIRS->ESPRESSO': self.qe_dirs} } ] )
+        else:
+            return FWAction(mod_spec=[{'_set': {
+                'PREV_DIRS->ESPRESSO': self.qe_dirs,
+                'PREV_DIRS->BGW': self.bgw_dirs} } ] )
+
                     
 
 class BgwInput(BgwInputTask):

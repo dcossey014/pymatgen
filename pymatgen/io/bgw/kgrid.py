@@ -297,6 +297,5 @@ class Kgrid(object):
     def from_file(self, filename):
         with open(filename, 'r') as fin:
             kpoint_grid = fin.readlines()
-            drop_line = kpoint_grid.pop(0)
             kpoint_grid[-1] = kpoint_grid[-1].rstrip()
-        return kpoint_grid
+        return kpoint_grid[2:]
