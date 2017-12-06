@@ -1,4 +1,4 @@
-import os
+import os, shutil
 import sys
 import string
 import subprocess
@@ -110,14 +110,18 @@ class QeMeanFieldGrids(object):
     '''
     Docstring
     '''
+
+    #TODO: Write Docstring
+    #TODO: Rewrite generate_kgrids() to make these files in a temporary folder structure
+    #TODO: that is then deleted after the grids are returned.
     def __init__(self, structure, kpoints_coarse=[4,4,4],
             kpoints_fine=[8,8,8], offset_type="Monkhorst-Pack",
             qshift=[0.000, 0.000, 0.001], fftw_grid=[8,8,8], 
             bgw_rev_off=False, log_cart_kpts=False):
 
         self.structure = structure
-        print("in QEKG: kpoints_coarse: {}\n kpoints_fine: {}\noffset_type: {}\n".format(
-                kpoints_coarse, kpoints_fine, offset_type))
+        #print("in QEKG: kpoints_coarse: {}\n kpoints_fine: {}\noffset_type: {}\n".format(
+        #            kpoints_coarse, kpoints_fine, offset_type))
         if isinstance(kpoints_coarse, dict):
             self.kpoints = kpoints_coarse
         else:
@@ -166,14 +170,25 @@ class QeMeanFieldGrids(object):
             print("Resetting WFNq_fi kpoints to WFN_fi kpoints")
             self.kpoints['wfnq_fi'] = [ i for i in self.kpoints['wfn_fi'] ]
 
-        print("in QEKG: structure: {}".format(self.structure))
+        #print("in QEKG: structure: {}".format(self.structure))
 
     def generate_kgrids(self):
         tasks = ['scf', 'wfn', 'wfn_co', 'wfnq', 'wfn_fi', 'wfnq_fi']
         self.kgrids = {}
+        if not os.path.exists('ESPRESSO'):
+            os.mkdir('ESPRESSO')
+        os.chdir('ESPRESSO')
+
         for i in tasks:
-            print("running kgrid task: {}".format(i))
+            #print("running kgrid task: {}".format(i))
+            if not os.path.exists(i):
+                os.mkdir(i)
+            os.chdir(i)
             self.kgrids[i] = self.generate_kgrid(qe_task=i)
+            os.chdir('../')
+        
+        os.chdir('../')
+        #shutil.rmtree('kgrid_tmp')
 
         return self.kgrids
 
@@ -220,8 +235,8 @@ class QeMeanFieldGrids(object):
             print "Unknown QE task in QeMeanFieldGrids"
             exit()
 
-        print("in QEKG: kpoints: {}\noffset_type: {}\nqshift: {}\n\n".format(
-                    kpoints, offset_type, qshift))
+        #print("in QEKG: kpoints: {}\noffset_type: {}\nqshift: {}\n\n".format(
+        #            kpoints, offset_type, qshift))
         self.grids[qe_task] = Kgrid(self.structure, kpoints=kpoints, offset_type=offset_type, 
                 qshift=qshift, fftw_grid=self.fftw_grid, bgw_rev_off=self.bgw_rev_off, 
                 log_cart_kpts=self.log_cart_kpts)

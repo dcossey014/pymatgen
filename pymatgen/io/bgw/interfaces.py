@@ -1,7 +1,8 @@
-import os, sys
+import os, sys, errno
 import glob
 import shutil
 from math import ceil
+from copy import deepcopy as dc
 
 import subprocess
 from monty.serialization import loadfn
@@ -9,6 +10,7 @@ from fireworks import Firework, FireTaskBase, FWAction, \
                         explicit_serialize, FileTransferTask, Workflow, LaunchPad
 from custodian import Custodian
 from pymatgen import Structure
+from pymatgen.io.espresso.inputs import QeMFInput, QeMFPw2BgwInputs
 from pymatgen.io.bgw.kgrid import QeMeanFieldGrids, generate_kpath
 from pymatgen.io.bgw.inputs import BgwInput, BgwInputTask
 from pymatgen.io.bgw.custodian_jobs import BGWJob, BgwDB, BgwCustodianTask
@@ -346,9 +348,10 @@ class BgwWorkflow():
 @explicit_serialize
 class QeMeanFieldTask(FireTaskBase):
     #TODO: Create to_file()
+    #TODO: Create as_dict() and from_dict() functions
     '''
     Custodian Task for running Mean Field Calculations with 
-    Quantum Espresso.
+    Quantum Espresso and postprocessed for use with BerkeleyGW.
     ''' 
     required_params = ['structure', 'pseudo_dir', 'kpoints_coarse',
                     'kpoints_fine', 'qshift', 'fftw_grid', 
@@ -357,81 +360,165 @@ class QeMeanFieldTask(FireTaskBase):
     optional_params = ['control', 'electrons', 'system', 'cell', 'ions',
                     'reduce_structure', 'bgw_rev_off', 'log_cart_kpts', 
                     'pw2bgw_input', 'bandstructure_kpoint_path',
-                    'num_kpoints_bandstructure', 'config_file']
-
-    def __init__(self, structure, pseudo_dir=None, kpoints_coarse=None,
-                kpoints_fine=None, qshift=None, fftw_grid=None, mpi_cmd='', 
-                pw_cmd='', pw2bgw_cmd='', mf_tasks=[], control={}, 
-                electrons={}, system={}, cell={}, ions={}, 
-                reduce_structure=False, bgw_rev_off=False, 
-                log_cart_kpts=False, pw2bgw_input={}, 
-                bandstructure_kpoint_path=False, num_kpoints_bandstructure=500,
-                config_file=None):
+                    'num_kpoints_bandstructure', 'cmplx_real', 
+                    'config_file']
+    
+    def __init__(self, *args, **kwargs):
+        super(QeMeanFieldTask, self).__init__(*args, **kwargs)
 
         # Mandatory Parameters
-        self.structure = structure
-        self.pseudo_dir = pseudo_dir
-        self.kpoints_co = kpoints_coarse
-        self.kpoints_fi = kpoints_fine
-        self.qshift = qshift
-        self.fftw_grid = fftw_grid
-        self.mpi_cmd = mpi_cmd
-        self.pw_cmd = pw_cmd
-        self.pw2bgw_cmd = pw2bgw_cmd
-        self.mf_tasks = mf_tasks
+        self.structure = self.get('structure')
+        self.pseudo_dir = self.get('pseudo_dir')
+        self.kpoints_co = self.get('kpoints_coarse')
+        self.kpoints_fi = self.get('kpoints_fine')
+        self.qshift = self.get('qshift')
+        self.fftw_grid = self.get('fftw_grid')
+        self.mpi_cmd = self.get('mpi_cmd')
+        self.pw_cmd = self.get('pw_cmd')
+        self.pw2bgw_cmd = self.get('pw2bgw_cmd')
+        self.mf_tasks = self.get('mf_tasks')
 
-        print("in QEMFT: structure: {}\npseudo: {}\n, kpt_co: {}\nkpt_fi: {}".format(
-                self.structure, self.pseudo_dir, self.kpoints_co, self.kpoints_fi))
-        # Specific Dictionaries for each calculation
-        self.control = control or {}
-        self.electrons = electrons or {}
-        self.system = system or {}
-        self.cell = cell or {}
-        self.ions = ions or {}
-        self.pw2bgw_input = pw2bgw_input or {}
-
+        #print("in QEMFT: structure: {}\npseudo: {}\n, kpt_co: {}\nkpt_fi: {}".format(
+        #        self.structure, self.pseudo_dir, self.kpoints_co, self.kpoints_fi))
         # Other Parameters
-        self.reduce_structure = reduce_structure or False
-        self.bgw_rev_off = bgw_rev_off or False
-        self.log_cart_kpts = log_cart_kpts or False
-        self.bandstructure_kpoint_path = bandstructure_kpoint_path or  False
-        self.num_kpoints_bandstructure = num_kpoints_bandstructure or 500
-        self.config_file = config_file if config_file else None
+        self.reduce_structure = self.get('reduce_structure', False)
+        self.bgw_rev_off = self.get('bgw_rev_off', False)
+        self.log_cart_kpts = self.get('log_cart_kpts', False)
+        self.bandstructure_kpoint_path = self.get('bandstructure_kpoint_path',  False)
+        self.num_kpoints_bandstructure = self.get('num_kpoints_bandstructure', 500)
+        self.cmplx_real = self.get('cmplx_real', 'real')
+        self.config_file = self.get('config_file', None)
+
+        # Import Configuration Dictionary if given a configuration File.
+        if self.config_file and os.path.isabs(self.config_file):
+            self.__dict__['config_dict'] = loadfn(self.config_file)
+        elif self.config_file:
+            fpath = os.path.join(os.environ['HOME'], self.config_file)
+            self.__dict__['config_dict'] = loadfn(fpath)
+        elif os.path.exists(os.path.join(os.environ['HOME'],
+                    'bgw_interface_defaults.yaml')):
+            fpath = os.path.join(os.environ['HOME'], 'bgw_interface_defaults.yaml')
+            self.__dict__['config_dict'] = loadfn(fpath)
+        else:
+            self.__dict__['config_dict'] = {}
+
+
+        # Specific Dictionaries for each calculation
+        prefix = self.get('control', {}).get('scf', {}).get(
+                            'prefix', '')
+        prefix = ( self.structure.composition.reduced_formula 
+                        if not prefix else prefix )
+        espresso_dict = self.config_dict.get('espresso', {} )
+        self.pw2bgw_input_dict = self.config_dict.get('pw2bgw', {} )
+        wfn_file = "wfn.{}".format(self.cmplx_real.lower())
+        rhog_file = "rho.{}".format(self.cmplx_real.lower())
+        cmplx_real_num = 1 if 'real' in self.cmplx_real.lower() else 2
+
+        (self.__dict__['task_control'], 
+            self.__dict__['task_system'],
+            self.__dict__['task_electrons'],
+            self.__dict__['task_ions'],
+            self.__dict__['task_cell'] ) = {}, {}, {}, {}, {}
+
+        for i in self.mf_tasks:
+            # Take in Defaults from User YAML
+
+            self.task_control[i] = dc(espresso_dict.get('control', {}) )
+            self.task_control[i].update({'verbosity': 'high', 'prefix': prefix})
+
+            self.task_system[i] = dc(espresso_dict.get('system', {}) )
+            self.task_electrons[i] = dc(espresso_dict.get('electrons', {}) )
+            self.task_ions[i] = dc(espresso_dict.get('ions', {}) )
+            self.task_cell[i] = dc(espresso_dict.get('cell', {}) )
+            if 'scf' not in i:
+                pw2bgw_task_dict = self.pw2bgw_input_dict.get(i, {})
+                pw2bgw_task_dict.update({'prefix': prefix, 'wfng_file': wfn_file,
+                                            'real_or_complex': cmplx_real_num} 
+                                        )
+
+            # Update with User Inputed Values
+            self.task_control[i].update(self.get('control', {}).get(i, {}) )
+            self.task_system[i].update(self.get('system', {}).get(i, {}) )
+            self.task_electrons[i].update(self.get('electrons', {}).get(i, {}) )
+            self.task_ions[i].update(self.get('ions', {}).get(i, {}) )
+            self.task_cell[i].update(self.get('cell', {}).get(i, {}) )
+
+        # Set VXC_Diag_Nmax and Update Pw2Bgw_Input dictionary with User values
+        self.pw2bgw_input_dict['wfn_co']['vxc_diag_nmax'] = self.task_system['wfn_co']['nbnd']
+        self.pw2bgw_input_dict['wfn_co']['rhog_file'] = rhog_file
+        self.pw2bgw_input_dict.update(self.get('pw2bgw_input', {}) )
 
         # Get Primitive Sructure if reducing structure
         if self.reduce_structure:
-            self.structure = self.structure.get_primitive_structure()
+            self.__dict__['structure'] = self.structure.get_primitive_structure()
 
         # Get Kgrids for QEMF
         if self.bandstructure_kpoint_path:
             self.mf_tasks = ['scf', 'wfn_fi']
             kpath = Generate_Kpath(self.structure, self.num_kpoints_bandstructure)
-            kpoints_fi = kpath.create_path()
+            self.kpoints_fi = kpath.create_path()
         
-        print("in QEMFT: structure: {}".format(self.structure))
         qemf_kgrids = QeMeanFieldGrids(self.structure, kpoints_coarse=self.kpoints_co,
                             kpoints_fine=self.kpoints_fi, qshift=self.qshift,
                             fftw_grid=self.fftw_grid, bgw_rev_off=self.bgw_rev_off, 
                             log_cart_kpts=self.log_cart_kpts)
 
-        self.kgrids = qemf_kgrids.generate_kgrids()
+        self.__dict__['kgrids'] = qemf_kgrids.generate_kgrids()
 
 
         # Use QeMFInputs from Espresso Inputs to build inputs.
-        self.inputs = QeMFInputs(self.structure, pseudo_dir = self.pseudo_dir,
+        self.__dict__['inputs'] = QeMFInput(self.structure, pseudo_dir = self.pseudo_dir,
                         kpoints_coarse=self.kgrids, kpoints_fine=self.kgrids,
-                        config_file=self.config_file)
+                        control=self.task_control, system=self.task_system, 
+                        ions=self.task_ions, electrons=self.task_electrons, 
+                        cell=self.task_cell, tasks=self.mf_tasks,
+                        reduce_structure=self.reduce_structure) 
 
+        # Use QeMFPw2BgwInputs to build PostProcessing Inputs.
+        self.__dict__['pw2bgw_inputs'] = QeMFPw2BgwInputs(self.structure,
+                        pw2bgw_input=self.pw2bgw_input_dict, mf_tasks=self.mf_tasks)
+
+    def write_inputs(self):
+        # Write Input Files
+        self.inputs.to_file()
+        self.pw2bgw_inputs.to_file()
+        
+        # Symbolically link data file and charge density file from SCF
+        #   to all other tasks.
+        def mkdir(dir):
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+
+        def force_link(file1, file2):
+            try:
+                os.symlink(file1,file2)
+            except OSError, e:
+                if e.errno == errno.EEXIST:
+                    os.remove(file2)
+                    os.symlink(file1,file2)
+
+        prefix  = self.inputs.scf.control['prefix']
+        save_dir = "{}.save".format(prefix)
+        scf_dir = "ESPRESSO/scf/{}".format(save_dir)
+        scf_chrg = os.path.join('../../../', scf_dir, 'charge-density.dat')
+        scf_dat = os.path.join('../../../', scf_dir, 'data-file.xml')
+
+        mkdir(scf_dir)
         for i in self.mf_tasks:
-            for j in ['control', 'system', 'cell', 'ions', 'electrons']:
-                d = self.get(j, {}).get(i, {})
-                if d:
-                    task = self.inputs.get(i, {}).get(j, {})
-                    task.update(d)
+            if 'scf' not in i.lower():
+                link_dir = os.path.join('ESPRESSO', i, save_dir)
+                mkdir(link_dir)
+                link_chrg = os.path.join(link_dir, 'charge-density.dat')
+                link_dat = os.path.join(link_dir, 'data-file.xml')
+
+                force_link(scf_dat, link_dat)
+                force_link(scf_chrg, link_chrg)
                     
     # Run each Espresso Calculation
     def run_task(self, fw_spec):
-        self.inputs.to_file()
+        # Write Input files and make Symbolic links
+        self.write_inputs()
+        sys.exit(0)
         
         # Method for running each Espresso Task
         def run_qe_task(self, task):
@@ -448,6 +535,57 @@ class QeMeanFieldTask(FireTaskBase):
         os.chdir("../")
         return FWAction(stored_data=self.output, mod_spec=[
                         {'_set': {'PREV_DIRS': self.prev_dirs}}])
+
+    def run_pw(self, pwx, dir_name, pw2bgwx=None):
+        mpi_pw = list(self.mpi_cmd)
+        mpi_pw.extend(pwx)
+        if pw2bgwx and not self.alternate_kpoints:
+            mpi_pw2bgw = list(self.mpi_cmd)
+            mpi_pw2bgw.extend(pw2bgwx)
+            job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
+        else:
+            job = PWJob(mpi_pw)
+        handlers = []
+        handlers.append(load_class("pymatgen.io.bgw.handlers", 'QuantumEspressoErrorHandler')())
+        c = Custodian(handlers=handlers, validators=[], jobs=[job])
+        self.output[dir_name] = c.run()
+
+    def add_spec(self, key, val):
+        # To use nested dictionary entries, use "->"
+        # as the separator for nested dictionaries
+        # i.e. '_queueadapter->walltime' as the key 
+        # to set {'_queueadapter': {'walltime': 'val'}}
+        def get_nested_dict(input_dict, key):
+            current = input_dict
+            toks = key.split("->")
+            n = len(toks)
+            for i, tok in enumerate(toks):
+                if tok not in current and i < n - 1:
+                    current[tok] = {}
+                elif i == n - 1:
+                    return current, toks[-1]
+                current = current[tok]
+
+        def get_nested_dict2(input_dict, val):
+            current = input_dict
+            for k, v in val.items():
+                if isinstance(v, dict):
+                    if k not in current.keys():
+                        current[k] = {}
+                    current = current[k]
+                    get_nested_dict2(current, v)
+                else:
+                    current[k] = v            
+
+        if isinstance(val, dict):
+            if key not in self.Firework.spec:
+                self.Firework.spec[key] = {}
+            current = self.Firework.spec[key]
+            get_nested_dict2(current, val)            
+
+        else:
+            (d, k) = get_nested_dict(self.Firework.spec, key)
+            d[k] = val
 
     '''
     def run_task(self, fw_spec):
@@ -583,8 +721,8 @@ class QeMeanFieldTask(FireTaskBase):
             if qe_task != 'scf' and not self.alternate_kpoints: 
                 print 'qe_task = ', qe_task
                 qe_task_pw2bgw = qe_pw2bgw.get(qe_task)
-                #print 'qe_task_pw2bgw = ', qe_task_pw2bgw
-                #print 'qe_task_grid = ', qe_task_grid
+                print 'qe_task_pw2bgw = ', qe_task_pw2bgw
+                print 'qe_task_grid = ', qe_task_grid
                 qe_task_grid_kpoints=qe_kgrids.grids[qe_task].kpoints
                 print 'qe_task_grid_kpoints = ', qe_task_grid_kpoints
                 qe_task_grid_offset_type=qe_kgrids.grids[qe_task].offset_type
@@ -625,55 +763,4 @@ class QeMeanFieldTask(FireTaskBase):
                 os.symlink('../../scf/{}/charge-density.dat'.format(save_dir),
                         '{}/charge-density.dat'.format(save_dir))
     '''
-
-    def run_pw(self, pwx, dir_name, pw2bgwx=None):
-        mpi_pw = list(self.mpi_cmd)
-        mpi_pw.extend(pwx)
-        if pw2bgwx and not self.alternate_kpoints:
-            mpi_pw2bgw = list(self.mpi_cmd)
-            mpi_pw2bgw.extend(pw2bgwx)
-            job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
-        else:
-            job = PWJob(mpi_pw)
-        handlers = []
-        handlers.append(load_class("pymatgen.io.bgw.handlers", 'QuantumEspressoErrorHandler')())
-        c = Custodian(handlers=handlers, validators=[], jobs=[job])
-        self.output[dir_name] = c.run()
-
-    def add_spec(self, key, val):
-        # To use nested dictionary entries, use "->"
-        # as the separator for nested dictionaries
-        # i.e. '_queueadapter->walltime' as the key 
-        # to set {'_queueadapter': {'walltime': 'val'}}
-        def get_nested_dict(input_dict, key):
-            current = input_dict
-            toks = key.split("->")
-            n = len(toks)
-            for i, tok in enumerate(toks):
-                if tok not in current and i < n - 1:
-                    current[tok] = {}
-                elif i == n - 1:
-                    return current, toks[-1]
-                current = current[tok]
-
-        def get_nested_dict2(input_dict, val):
-            current = input_dict
-            for k, v in val.items():
-                if isinstance(v, dict):
-                    if k not in current.keys():
-                        current[k] = {}
-                    current = current[k]
-                    get_nested_dict2(current, v)
-                else:
-                    current[k] = v            
-
-        if isinstance(val, dict):
-            if key not in self.Firework.spec:
-                self.Firework.spec[key] = {}
-            current = self.Firework.spec[key]
-            get_nested_dict2(current, val)            
-
-        else:
-            (d, k) = get_nested_dict(self.Firework.spec, key)
-            d[k] = val
 

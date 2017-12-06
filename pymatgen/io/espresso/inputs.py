@@ -15,7 +15,7 @@ __maintainer__ = "Shyue Ping Ong"
 __email__ = "ongsp@ucsd.edu"
 __date__ = "3/27/15"
 
-
+import pprint
 import six, math, abc, glob, sys, errno
 import os, fnmatch, re, subprocess
 from bisect import bisect_left
@@ -40,10 +40,13 @@ class PwInput(MSONable):
     Base input file class for Quantum Espresso pw.x
     '''
 
+    #TODO: Write __setattr__ function to make things nice in a dictionary
+    #TODO: Make all __dict__ calls attributes.  No reason for __dict__ since
+    #       this is not a FireTaskBase Class.
     def __init__(self, structure, pseudo_dir=None, control={'calculation': 'scf'}, 
                 system={}, electrons={}, ions={}, cell={}, kpoints_mode='automatic', 
-                kpoints_grid=[1,1,1], kpoints_shift=[0,0,0], qshift=[0,0,0], 
-                convert_to_primitive_structure=False, config_file=None):
+                kpoints_grid=[1,1,1], kpoints_shift=[1,1,1], 
+                reduce_structure=False, config_file=None):
         """
         Initializes a PWSCF input file for using pw.x in QuantumEspresso.
 
@@ -64,9 +67,9 @@ class PwInput(MSONable):
             kpoints_mode (str):  Kpoints generation mode. Default to 'automatic'.
             kpoints_grid (list):  The kpoint grid. Default to [1, 1, 1].
             kpoints_shift (list):  The shift for the kpoints. Defaults to
-                    [0,0,0].
-            convert_to_primitive_structure (bool):  If True, structure will be
-                    converted to its reduced primitive structure.
+                    [1,1,1].
+            reduce_structure (bool):  If True, structure will be converted to 
+                    its reduced primitive structure.
             config_file (str):  Configuration file from which to pull user default
                     values for control, system, electrons, and ions.  Default is 
                     to look for specified file in User's HOME directory but will 
@@ -74,6 +77,8 @@ class PwInput(MSONable):
         """
 
         # Check for Configuration Defaults File and apply those changes.
+        #print("In PwInput: config_file: {}".format(config_file))
+        self.__dict__['config_file'] = config_file
         if config_file and os.path.isabs(config_file):
             config_dict = loadfn(config_file)
         elif config_file:
@@ -92,21 +97,24 @@ class PwInput(MSONable):
             self.__dict__['ions'],
             self.__dict__['cell']) = {'calculation': 'scf'}, {}, {}, {}, {}
 
-        # Set Defaults from File
+        # Set Defaults from Configuration File if one is found
         if config_dict:
-            if 'control' in config_dict.keys():
-                self.__dict__['control'].update(config_dict['control'])
-            if 'system' in config_dict.keys():
-                self.__dict__['system'].update(config_dict['system'])
-            if 'electrons' in config_dict.keys():
-                self.__dict__['electrons'].update(config_dict['electrons'])
-            if 'ions' in config_dict.keys():
-                self.__dict__['ions'].update(config_dict['ions'])
-            if 'cell' in config_dict.keys():
-                self.__dict__['cell'].update(config_dict['cell'])
+            self.__dict__['control'].update(
+                    config_dict.get('control', {}) )
+            self.__dict__['system'].update(
+                    config_dict.get('system', {}) )
+            self.__dict__['electrons'].update(
+                    config_dict.get('electrons', {}) )
+            self.__dict__['ions'].update(
+                    config_dict.get('ions', {}) )
+            self.__dict__['cell'].update(
+                    config_dict.get('cell', {}) )
 
+        #print("values after config_file: {}".format(self.control))
+        
         # Override Defaults with User Supplied Values
         self.__dict__['structure'] = structure
+        self.__dict__['pseudo_dir'] = pseudo_dir
         self.__dict__['control'].update(control if control else {})
         self.__dict__['system'].update(system if system else {})
         self.__dict__['electrons'].update(electrons if electrons else {})
@@ -115,20 +123,24 @@ class PwInput(MSONable):
         self.__dict__['kpoints_mode'] = kpoints_mode.lower() 
         self.__dict__['kpoints_grid'] = kpoints_grid
         self.__dict__['kpoints_shift'] = kpoints_shift
-        self.__dict__['convert_to_primitive_structure'] = convert_to_primitive_structure 
+        self.__dict__['reduce_structure'] = reduce_structure
 
+
+        #print("values after user values: {}".format(self.control))
         # If using reduced primite Structure, set that before moving forward
-        if self.convert_to_primitive_structure:
+        if self.reduce_structure:
             self.__dict__['structure'] = self.convert2primitive(self.structure)
 
-        # Set prefix name automatically
+        # Set prefix name automatically if not already set in control dictionary
         formula_prefix = self.structure.composition.reduced_formula
-        self.control['prefix'] = formula_prefix
+        self.control['prefix'] = ( formula_prefix 
+                            if not 'prefix' in self.control.keys() 
+                            else self.control['prefix'] )
         
         # Overwrite PseudoPotential Directory from Deafults File if User supplied
         # one during the initialization of the class.
         if pseudo_dir:
-            self.__dict__['control']['pseudo_dir'] = pseudo_dir
+            self.control['pseudo_dir'] = pseudo_dir
 
         # Set dictionary for Atom types to use particular pseudopotential files.
         # might want to have some user override on this maybe?
@@ -183,9 +195,9 @@ class PwInput(MSONable):
             #out.append("%s" % i for i in self.kpoints_grid)
             #self.kpoints_grid[-1]=self.kpoints_grid[-1].rstrip()
             #out.append("".join(self.kpoints_grid))
-            out.append("  {}".format(len(kpoints_grid)))
+            out.append("  {}".format(len(self.kpoints_grid)))
             out.extend(['{:16.9F} {:14.9F} {:14.9F} {:3.1F}'.format(
-                        k[0], k[1], k[2], k[3]) for k in kpoints_grid] )
+                        k[0], k[1], k[2], k[3]) for k in self.kpoints_grid] )
         out.append("CELL_PARAMETERS angstrom")
         for vec in self.structure.lattice.matrix:
             out.append("  {:10.6f} {:10.6f} {:10.6f}".format(vec[0], vec[1], vec[2]))
@@ -318,7 +330,7 @@ class PwInput(MSONable):
         
         structure = Structure(lattice, species, coords)
         pseudo_dir=sections['control']['pseudo_dir']
-        return PwInput(structure, pseudo_dir=pseudo_dir, control=sections['control'], 
+        return cls(structure, pseudo_dir=pseudo_dir, control=sections['control'], 
                         system=sections['system'], electrons=sections['electrons'], 
                         ions=sections['ions'], cell=sections['cell'],
                         kpoints_mode=kpoints_mode, kpoints_grid=kpoints, 
@@ -331,8 +343,10 @@ class QeMFInput(MSONable):
     utilizes PwInput class for creating input files.
     '''
     def __init__(self, structure, pseudo_dir=None, kpoints_coarse=[1,1,1], 
-                kpoints_fine=[4,4,4], kpoint_shift=[1,1,1], tasks=['scf', 'wfn'],
-                reduce_structure=False, config_file=None):
+                kpoints_fine=[4,4,4], kpoints_shift=[1,1,1], 
+                tasks=['scf', 'wfn'], reduce_structure=False, 
+                control={}, system={}, electrons={}, ions={}, 
+                cell={}, config_file=None):
         """
         Initializes multiple PWSCF input files for use in WorkFlows 
         using pw.x in QuantumEspresso.
@@ -342,11 +356,16 @@ class QeMFInput(MSONable):
             pseudo_dir (str):       String of the directory containing pseudopotential 
                                     files.
             kpoints_coarse (list/dict):The kpoint grid for coarse grid. Can also be a 
-                                    dict with different settings for each task.
+                                    dict with different kpoint lists for each task.
                                     Default to [1,1,1].
             kpoints_fine (list/dict):The kpoint grid for fine grid. Can also be a 
-                                    dict with different settings for each task.
+                                    dict with different kpoint lists for each task.
                                     Defaults to [4,4,4].
+            kpoints_shift (list):   The shift to kpoint grid used in Espresso.
+                                    Options: 
+                                        [0,0,0] for no shift (grid includes Gamma point)
+                                        [1,1,1] for a Monkhorst Pack shift
+                                    Defaults to [1,1,1].
             tasks (list):           List of PWSCF tasks to create input files.
                                     Default to ['scf', 'wfn'].
             reduce_structure (bool):If True, structure will be converted to its 
@@ -358,15 +377,29 @@ class QeMFInput(MSONable):
         """
         # Initialize attributes that are needed for other member functions.
         self.structure = structure
+        self.pseudo_dir = pseudo_dir
         self.tasks = tasks
+
+        self.kpoints_fine = kpoints_fine
+        self.kpoints_coarse = kpoints_coarse
+        self.kpoints_shift = kpoints_shift
+        self.reduce_structure = reduce_structure
+
+        self.control = control
+        self.system = system
+        self.electrons = electrons
+        self.ions = ions
+        self.cell = cell
+
+        self.config_file = config_file
 
         # Create Input Files for list of Tasks
         for i in tasks:
             if 'fi' in i:
-                if isinstance(kpoint_fine, dict):
+                if isinstance(kpoints_fine, dict):
                     kps = kpoints_fine[i]
                 else:
-                    kps = kpoint_fine
+                    kps = kpoints_fine
                 if isinstance(kps[0], list):
                     kp_mode = 'crystal'
                 else:
@@ -374,10 +407,10 @@ class QeMFInput(MSONable):
 
                 kp_shift = [1,1,1]
             else:
-                if isinstance(kpoint_coarse, dict):
+                if isinstance(kpoints_coarse, dict):
                     kps = kpoints_coarse[i]
                 else:
-                    kps = kpoint_coarse
+                    kps = kpoints_coarse
                 if isinstance(kps[0], list):
                     kp_mode = 'crystal'
                 else:
@@ -387,16 +420,36 @@ class QeMFInput(MSONable):
                 if 'co' in i:
                     kp_shift = [0, 0, 0]
 
+            task_dicts = {}
             if 'wfn' in i:
-                control = {'calculation': 'bands'}
+                task_dicts['control'] = {'calculation': 'bands'}
             else:
-                control = {'calculation': i}
+                task_dicts['control'] = {'calculation': i}
+
+            d = self.as_dict()
+            with open('debug.out', 'w') as fout:
+                pprint.pprint(d, fout)
+            for j in ['control', 'system', 'electrons', 'ions', 'cell']:
+                subgroup = d.get(j, {}).get(i, {})
+                #print("IN QEMFINPUT: j = {}\t\ttask: {}".format(j, i))
+                #print("IN QEMFINPUT: subgroup: {}".format(subgroup))
+                if subgroup and j in task_dicts.keys():
+                    task_dicts[j].update(subgroup)
+                elif subgroup:
+                    task_dicts[j] = subgroup
+                else:
+                    task_dicts[j] = {}
+
+            #print("IN QEMFINPUT: task_dicts: {}".format(task_dicts))
             
             setattr(self, i, PwInput(structure, pseudo_dir=pseudo_dir, 
-                                control=control, kpoints_mode=kp_mode,
-                                kpoints_grid=kps, kpoints_shift=kp_shift,
-                                qshift=qshift, 
-                                convert_to_primitive_structure=convert_to_primitive_structure,
+                                control=task_dicts['control'], 
+                                system=task_dicts['system'],
+                                electrons=task_dicts['electrons'],
+                                ions=task_dicts['ions'], cell=task_dicts['cell'],
+                                kpoints_mode=kp_mode, kpoints_grid=kps, 
+                                kpoints_shift=kp_shift,
+                                reduce_structure=reduce_structure,
                                 config_file=config_file) )
 
     def to_file(self):
@@ -405,7 +458,7 @@ class QeMFInput(MSONable):
             os.mkdir('./ESPRESSO')
         os.chdir('./ESPRESSO')
         
-        for i in tasks:
+        for i in self.tasks:
             # Create directory for input file
             if not os.path.exists(i):
                 os.mkdir(i)
@@ -423,6 +476,38 @@ class QeMFInput(MSONable):
         # Move back to original directory
         os.chdir('../')
 
+    '''
+    def as_dict(self):
+        return {'@module': self.__class__.__module__,
+                '@class': self.__class__.__name__,
+                'structure': self.structure.as_dict(),
+                'pseudo_dir': self.pseudo_dir,
+                'kpoints_coarse': self.kpoints_coarse,
+                'kpoints_fine': self.kpoints_fine, 
+                'kpoints_shift': self.kpoints_shift,
+                'tasks': self.tasks,
+                'reduce_structure': self.reduce_structure,
+                'control': self.control,
+                'system': self.system,
+                'electrons': self.electrons,
+                'ions': self.ions,
+                'cell': self.cell,
+                'config_file': self.config_file}
+
+    @classmethod    
+    def from_dict(cls, d):
+        structure = Structure.from_dict(d['structure'])
+        return cls(structure, pseudo_dir=d['pseudo_dir'],
+                    kpoints_coarse=d['kpoints_coarse'],
+                    kpoints_fine=d['kpoints_fine'],
+                    kpoints_shift=d['kpoints_shift'],
+                    tasks=d['tasks'], 
+                    reduce_structure=d['reduce_structure'],
+                    control=d['control'], system=d['system'],
+                    electrons=d['electrons'], ions=d['ions'],
+                    cell=d['cell'], config_file=d['config_file'] )
+    '''
+                    
 
 class PWInput(object):
     """
@@ -661,16 +746,6 @@ class PWInput(object):
                         kpoints_shift=kpoints_shift)
 
 
-class QeMeanFieldInput(MSONable):
-    """
-    Docstring
-    """
-    def __init__(self, structure, pseudo_dir, kps_co, kps_fi, 
-                qshift, mf_tasks, cmplx_real='complex', 
-                config_file=None, convert_to_primitive_structure=False):
-        pass
-                
-
 class PwInputError(BaseException):
     pass
 
@@ -705,12 +780,14 @@ class PwBandsInput(PwPpInput):
     def write_input(self, filename):
         pass
 
-class Pw2BgwInput(object):
+class Pw2BgwInput(MSONable):
+    #TODO: Rewrite to_file() to use new self.input_pw2bgw structure instead of sections
     '''
     Base Input file Class for PW2BGW post-processing.
     '''
 
-    def __init__(self, structure, pw2bgw_input=None, kpoints=None, k_offset=None, qshift=None ):
+    def __init__(self, structure, pw2bgw_input=None, kpoints=None, 
+                kpoints_shift=None, qshift=None ):
         '''
         Initializes a PW2BGW input file.
 
@@ -723,36 +800,39 @@ class Pw2BgwInput(object):
         '''
 
         self.structure = structure
-        self.sections = {}
-        self.sections['input_pw2bgw'] = pw2bgw_input or {'prefix': Structure.formula,
-                                'wfng_flag': True, 'wfng_kgrid': False}
+        self.input_pw2bgw = pw2bgw_input or {
+                                'prefix': self.structure.composition.reduced_formula,
+                                'wfng_flag': True, 'wfng_kgrid': False
+                                }
         self.kpoints=kpoints
+        self.kpoints_shift=kpoints_shift
+        self.qshift=qshift
 
         if self.kpoints:
-            self.sections['input_pw2bgw']['wfng_kgrid'] = True
-            self.sections['input_pw2bgw']['wfng_nk1'] = int(self.kpoints[0])
-            self.sections['input_pw2bgw']['wfng_nk2'] = int(self.kpoints[1])
-            self.sections['input_pw2bgw']['wfng_nk3'] = int(self.kpoints[2])
+            self.input_pw2bgw['wfng_kgrid'] = True
+            self.input_pw2bgw['wfng_nk1'] = int(self.kpoints[0])
+            self.input_pw2bgw['wfng_nk2'] = int(self.kpoints[1])
+            self.input_pw2bgw['wfng_nk3'] = int(self.kpoints[2])
 
-            self.k_offset = k_offset if k_offset else "Monkhorst-Pack"
+            self.kpoints_shift = kpoints_shift if kpoints_shift else "Monkhorst-Pack"
             self.qshift = qshift if qshift else [0, 0, 0]
 
-            if isinstance(self.k_offset, list):
-                self.sections['input_pw2bgw']['wfng_dk1'] = self.k_offset[0]
-                self.sections['input_pw2bgw']['wfng_dk2'] = self.k_offset[1]
-                self.sections['input_pw2bgw']['wfng_dk3'] = self.k_offset[2]
-            elif "monkhorst" in self.k_offset.lower(): 
-                self.sections['input_pw2bgw']['wfng_dk1'] = 0.5 + self.qshift[0]*self.kpoints[0]
-                self.sections['input_pw2bgw']['wfng_dk2'] = 0.5 + self.qshift[1]*self.kpoints[1]
-                self.sections['input_pw2bgw']['wfng_dk3'] = 0.5 + self.qshift[2]*self.kpoints[2]
-            elif 'random' in self.k_offset.lower():
-                self.sections['input_pw2bgw']['wfng_dk1'] = 0.47 + self.qshift[0]*self.kpoints[0]
-                self.sections['input_pw2bgw']['wfng_dk2'] = 0.37 + self.qshift[1]*self.kpoints[1]
-                self.sections['input_pw2bgw']['wfng_dk3'] = 0.32 + self.qshift[2]*self.kpoints[2]
+            if isinstance(self.kpoints_shift, list):
+                self.input_pw2bgw['wfng_dk1'] = self.kpoints_shift[0]
+                self.input_pw2bgw['wfng_dk2'] = self.kpoints_shift[1]
+                self.input_pw2bgw['wfng_dk3'] = self.kpoints_shift[2]
+            elif "monkhorst" in self.kpoints_shift.lower(): 
+                self.input_pw2bgw['wfng_dk1'] = 0.5 + self.qshift[0]*self.kpoints[0]
+                self.input_pw2bgw['wfng_dk2'] = 0.5 + self.qshift[1]*self.kpoints[1]
+                self.input_pw2bgw['wfng_dk3'] = 0.5 + self.qshift[2]*self.kpoints[2]
+            elif 'random' in self.kpoints_shift.lower():
+                self.input_pw2bgw['wfng_dk1'] = 0.47 + self.qshift[0]*self.kpoints[0]
+                self.input_pw2bgw['wfng_dk2'] = 0.37 + self.qshift[1]*self.kpoints[1]
+                self.input_pw2bgw['wfng_dk3'] = 0.32 + self.qshift[2]*self.kpoints[2]
             else:
-                self.sections['input_pw2bgw']['wfng_dk1'] = self.qshift[0]*self.kpoints[0]
-                self.sections['input_pw2bgw']['wfng_dk2'] = self.qshift[1]*self.kpoints[1]
-                self.sections['input_pw2bgw']['wfng_dk3'] = self.qshift[2]*self.kpoints[2]
+                self.input_pw2bgw['wfng_dk1'] = self.qshift[0]*self.kpoints[0]
+                self.input_pw2bgw['wfng_dk2'] = self.qshift[1]*self.kpoints[1]
+                self.input_pw2bgw['wfng_dk3'] = self.qshift[2]*self.kpoints[2]
 
     def __str__(self):
         out = []
@@ -762,7 +842,7 @@ class Pw2BgwInput(object):
             return v
 
         for k1 in ['input_pw2bgw']:
-            v1 = self.sections[k1]
+            v1 = self.input_pw2bgw
             out.append("&%s" % k1.upper())
             sub = []
             for k2 in sorted(v1.keys()):
@@ -771,7 +851,7 @@ class Pw2BgwInput(object):
             out.append(",\n".join(sub))
         return "\n".join(out)
 
-    def write_input(self, filename):
+    def to_file(self, filename):
         '''
         Write the PW2BGW input file.
 
@@ -781,6 +861,69 @@ class Pw2BgwInput(object):
         with open(filename, 'w') as fout:
             fout.write(self.__str__()+"\n")
 
+
+class QeMFPw2BgwInputs(MSONable):
+    #TODO: Write in functions for taking in config_file parameters from 
+    #       espresso_interface_defaults.yaml ??
+    #TODO: Discuss with Dr. Kedziora if this should be moved to bgw/inputs.py considering 
+    #       this is a BGW program, not Espresso executable.
+    '''
+    Docstring
+    '''
+    def __init__(self, structure, pw2bgw_input={}, mf_tasks=['scf', 'wfn'], 
+                config_file=None):
+        self.structure = structure
+        self.pw2bgw_input = pw2bgw_input
+        self.mf_tasks = mf_tasks
+        self.config_file = config_file
+        prefix = self.structure.composition.reduced_formula
+
+        # Set dictionaries for input files
+        for i in self.mf_tasks:
+            # Read in input files from kgrid.x for Kpoint parameters for Pw2Bgw.
+            # Reduces user interaction and guaranteed to get the parameters 
+            #   the same as was used in pw.x calculations.
+            input_file = os.path.join('ESPRESSO', i, "{}.in".format(i))
+            with open(input_file, 'r') as fin:
+                lines = fin.readlines()
+                
+            kpoints = [int(j) for j in lines[0].strip().split()]
+            kpoints_shift = [float(j) for j in lines[1].strip().split()]
+            qshift = [float(j) for j in lines[2].strip().split()]
+
+            # Setup parameters for input file
+            task_dict = self.pw2bgw_input.get(i)
+
+            d = self.as_dict()
+            with open('debug_qepw2bgw.out', 'w') as fout:
+                pprint.pprint(d, fout)
+            
+            setattr(self, i, Pw2BgwInput(self.structure, pw2bgw_input=task_dict,
+                                        kpoints=kpoints, kpoints_shift=kpoints_shift,
+                                        qshift=qshift) )
+    def to_file(self):
+        # Create Directory and sub directories for input files
+        if not os.path.exists('./ESPRESSO'):
+            os.mkdir('./ESPRESSO')
+        os.chdir('./ESPRESSO')
+        
+        for i in self.mf_tasks:
+            if not 'scf' in i.lower():
+                # Change directory for writing PostProcessing input file.
+                # Directory should already exist from Writing kgrid.x files.
+                os.chdir(i)
+                
+                # Write Input File
+                fin = getattr(self, i)
+                fin.to_file('pp_in')
+
+                # Move up a Directory to prepare for next input file
+                os.chdir('../')
+
+        # Move back to original directory
+        os.chdir('../')
+
+        
 
 
 '''

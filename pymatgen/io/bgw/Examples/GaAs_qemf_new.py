@@ -21,7 +21,7 @@ def gsphere(e_cut):
     #print "in gsphere e_cut=",e_cut
     gsin=open("gsphere.inp",'w')
     a2b=1.88973
-    cell_vecs=np.asarray(s_prim.lattice.matrix,dtype=float)
+    cell_vecs=np.asarray(s.lattice.matrix,dtype=float)
     cell_vecs_bohr=cell_vecs*a2b
     for vec in cell_vecs_bohr:
         gsin.write( " %14.8f %14.8f %14.8f\n" % (vec[0], vec[1], vec[2]) )
@@ -124,9 +124,9 @@ print ""
 ###
 ### below are model dependenant parameters that are required by BGW below
 ###
+"""
 finder = SpacegroupAnalyzer(s)
 s_prim = finder.get_primitive_standard_structure()
-"""
 Gives a structure with a primitive cell according to certain standards
 the standards are defined in Setyawan, W., & Curtarolo, S. (2010).
 High-throughput electronic band structure calculations:
@@ -135,16 +135,14 @@ Challenges and tools. Computational Materials Science,
 
 Returns:
     The structure in a primitive standardized cell
-"""
 print s_prim
 print s_prim.__repr__()
+"""
 
 print "##########################################################"
 print "### the following variables are set according to the model"
 print "### and the parameters above."
 print "###"
-# get rid of spaces for pwscf and pw2bgw file prefixes
-formula_prefix=s_prim.formula.replace(' ','')
 
 # number_bands may later be attenuated to accomodate larger cuttoffs for more G vecs
 # in sigma and epsilon
@@ -197,45 +195,13 @@ fftw_grid, dummy=gsphere(e_cut_mean_field)
 print "fftw_grid from gsphere = ",fftw_grid
 print ""
 
-if cmplx_real == 'cmplx':
-    cmplx_bool=True
-else:
-    cmplx_bool=False
-
-kpoints = {}
-kpoints['scf'] = kpts_co
-kpoints['wfn'] = kpts_co
-kpoints['wfn_co'] = kpts_co
-kpoints['wfn_fi'] = kpts_fi
-kpoints['wfnq'] = kpts_co
-kpoints['wfnq_fi'] = kpts_fi
-
+cmplx_bool = True if 'cmplx' in cmplx_real.lower() else False
 
 mean_field_tasks=['scf','wfn','wfnq','wfn_co','wfn_fi','wfnq_fi']
 
-scf_control={"calculation" : "scf",
-                "pseudo_dir": pseudo_dir,
-                'prefix': formula_prefix,
-                'tstress': True,
-                'tprnfor': True,
-                'verbosity': 'high'}
-
-wfn_control={"calculation" : "bands",
-                "pseudo_dir": pseudo_dir,
-                'prefix': formula_prefix,
-                'tstress': True,
-                'tprnfor': True}
-
-qemft_control={}
-qemft_control['scf']=scf_control
-for i in ['wfn', 'wfnq', 'wfn_co', 'wfn_fi', 'wfnq_fi']:
-    qemft_control[i] = copy.deepcopy(wfn_control)
-
-scf_system={'ecutwfc': e_cut_mean_field }
-
 qemft_system = {}
-for i in ['scf', 'wfn', 'wfnq', 'wfn_co', 'wfn_fi', 'wfnq_fi']:
-    qemft_system[i] = copy.deepcopy(scf_system)
+for i in mean_field_tasks:
+    qemft_system[i] = {}
 
 qemft_system['wfn']['nbnd'] = nbnd_wfn
 qemft_system['wfnq']['nbnd'] = nbnd_wfnq
@@ -243,70 +209,21 @@ qemft_system['wfn_co']['nbnd'] = nbnd_wfn_co
 qemft_system['wfn_fi']['nbnd'] = nbnd_wfn_fi
 qemft_system['wfnq_fi']['nbnd'] = nbnd_wfnq_fi
 
-scf_electrons={'conv_thr': 1.0e-10, 'diago_full_acc': True, 'diagonalization': 'cg'}
-qemft_electrons={}
-for i in ['scf', 'wfn', 'wfnq', 'wfn_co', 'wfn_fi', 'wfnq_fi']:
-    qemft_electrons[i] = copy.deepcopy(scf_electrons)
-
-wfn_file='wfn.'+cmplx_real
-if cmplx_real == 'real':
-    real_or_complex=1
-elif cmplx_real == 'cmplx':
-    real_or_complex=2
-else:
-    print "unknown cmplx_real"
-    exit()
-
-basic_in_pw2bgw = {
-    'prefix':  formula_prefix,
-    'wfng_flag': True,
-    'real_or_complex': real_or_complex,
-    'wfng_file': wfn_file,
-    'wfng_kgrid': False
-}
-
-# Set PostProcessing QE Dictionary Parameters
-qemft_pw2bgw={}
-for i in ['wfn', 'wfnq', 'wfn_co', 'wfn_fi', 'wfnq_fi']:
-    qemft_pw2bgw[i] = copy.deepcopy(basic_in_pw2bgw)
-
-rhog_file='rho.'+cmplx_real
-
-qe_wfn_co_in_pw2bgw = qemft_pw2bgw['wfn_co']
-qe_wfn_co_in_pw2bgw['rhog_flag'] = True
-qe_wfn_co_in_pw2bgw['rhog_file']=rhog_file
-qe_wfn_co_in_pw2bgw['vxc_flag']=True
-qe_wfn_co_in_pw2bgw['vxc_file']='vxc.dat'
-qe_wfn_co_in_pw2bgw['vxc_diag_nmin']=1
-qe_wfn_co_in_pw2bgw['vxc_diag_nmax']=number_bands
-qe_wfn_co_in_pw2bgw['vxc_offdiag_nmin']=0
-qe_wfn_co_in_pw2bgw['vxc_offdiag_nmax']=0
-
 config_file='bgw_interface_defaults.yaml'
-#TODO: Add in control, system, etc. dictionaries to determine if that function works like it should
-'''
-qemft = bint.QeMeanFieldTask(structure=s_prim, pseudo_dir=pseudo_dir,
+qemft = bint.QeMeanFieldTask(structure=s, pseudo_dir=pseudo_dir,
         mpi_cmd=mpi_cmd, pw_cmd=pw_cmd, pw2bgw_cmd=pw2bgw_cmd, kpoints_coarse=kpts_co,
-        kpoints_fine=kpts_fi, mf_tasks=mean_field_tasks, qshift=qshift, 
+        kpoints_fine=kpts_fi, mf_tasks=mean_field_tasks, system=qemft_system, qshift=qshift, 
         fftw_grid=fftw_grid, cmplx_real=cmplx_real, config_file=config_file)
-'''
-
-qemft2 = bint.QeMeanFieldTask(structure=s_prim, pseudo_dir=pseudo_dir, 
-        mpi_cmd=mpi_cmd, pw_cmd=pw_cmd, pw2bgw_cmd=pw2bgw_cmd, kpoints_coarse=kpts_co,
-        kpoints_fine=kpts_fi, control=qemft_control, system=qemft_system,
-        electrons=qemft_electrons, pw2bgw_input=qemft_pw2bgw, 
-        mf_tasks=mean_field_tasks, qshift=qshift, fftw_grid=fftw_grid, 
-        cmplx_real=cmplx_real, config_file=config_file)
 
 #qemft = bint.QeMeanFieldTask(structure=s_prim, kpoints=kpoints, pseudo_dir=pseudo_dir,
 #        mpi_cmd=mpi_cmd, pw_cmd=pw_cmd, pw2bgw_cmd=pw2bgw_cmd, qshift=qshift,
 #        fftw_grid=fftw_grid, qe_control=qemft_control, qe_system=qemft_system,
 #        qe_electrons=qemft_electrons, qe_pw2bgw=qemft_pw2bgw, mf_tasks=mean_field_tasks)
 
-qemf_fw = Firework([qemft2], name="QeMeanField")
+qemf_fw = Firework([qemft], name="QeMeanField")
 sys.exit(0)
 
-eps_inp = binp.BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+eps_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
             kpoints=kpts_co, qshift=qshift, filename='epsilon.inp',
             qemf_dir=prev_qemf_dir)
 
@@ -317,7 +234,7 @@ eps_fw = bint.BgwFirework(eps_inp, name=namei, complex=cmplx_bool, mpi_cmd=mpi_c
 
 #eps_fw.add_fw_to_launchpad()
 
-sig_inp = binp.BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+sig_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
                 kpoints=kpts_co, qshift=qshift, filename='sigma.inp',
                 qemf_dir=prev_qemf_dir)
 
@@ -339,7 +256,7 @@ sig_fw = bint.BgwFirework(sig_inp, name="Sigma Task", ppx=ppx, complex=cmplx_boo
 
 bgw_wf=bint.BgwWorkflow(qemf_fw, eps_fw, sig_fw, name="Sigma Converge")
 
-krn_inp = binp.BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+krn_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
                 qshift=qshift, filename='kernel.inp',
                 qemf_dir=prev_qemf_dir)
 
@@ -354,7 +271,7 @@ krn_inp.screening_semiconductor = True
 
 krn_fw = bint.BgwFirework(krn_inp, name="Kernel Task", complex=cmplx_bool,  mpi_cmd=mpi_cmd)
 
-abs_inp = binp.BgwInput(s_prim, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+abs_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
                 qshift=qshift, filename='absorption.inp',
                 qemf_dir=prev_qemf_dir)
 
