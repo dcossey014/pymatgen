@@ -29,6 +29,7 @@ from pymatgen.core.periodic_table import Element
 from pymatgen.electronic_structure.bandstructure import Spin, BandStructureSymmLine
 from pymatgen.electronic_structure.plotter import BSPlotter
 from pymatgen.io.bgw.kgrid import Generate_Kpath
+from pymatgen.io.bgw.inputs import BgwInput
 from monty.json import MSONable
 
 logger = logging.getLogger(__name__)
@@ -156,17 +157,17 @@ class BgwRun(MSONable):
         self.timings = {}
         for i, line in enumerate(lines):
             line = line.strip()
-            if line.find("BerkeleyGW") == 0:
+            if line.find("BerkeleyGW branch") == 0:
                 self._parse_version(line)
-            if line.find("version  Run") != -1:
+            if line.find("version, run") != -1:
                 self._parse_runtype(line) 
             if "MB per PE" in line:
                 self._parse_memory(line) 
             if "grid)" in line:
                 self._parse_band_info(line) 
-            if "CPU [s]" in line:
+            if "CPU (s)" in line:
                 self._parse_timings(i, lines) 
-            if line.find("ndiag") == 0:
+            if line.find("Number of bands") != -1:
                 self.num_bands = int(line.split()[-1])
 
             if "Sigma" in self.runtype and "Symmetrized values" in line:
@@ -198,7 +199,7 @@ class BgwRun(MSONable):
     def _parse_runtype(self, stream):
         l = stream.split()
         self.runtype = l[0]
-        self.cmplx_real = l[1]
+        self.cmplx_real = l[2]
         if "Sigma" in self.runtype:
             self.band_avgs = {} 
 
@@ -322,7 +323,7 @@ class BgwRun(MSONable):
         i = 1
         self.ch_convergence, d = {}, {}
 
-        with open('ch_converge.dat') as fin:
+        with open(os.path.join(self.dirname, 'ch_converge.dat') ) as fin:
             for line in fin.readlines():
                 l = line.strip().split()
                 if "# k =" in line:

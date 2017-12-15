@@ -14,6 +14,7 @@ from pymatgen.io.espresso.inputs import QeMFInput, QeMFPw2BgwInputs
 from pymatgen.io.bgw.kgrid import QeMeanFieldGrids, generate_kpath
 from pymatgen.io.bgw.inputs import BgwInput, BgwInputTask
 from pymatgen.io.bgw.custodian_jobs import BGWJob, BgwDB, BgwCustodianTask
+from pymatgen.io.espresso.custodian_jobs import PWJob
 
 def load_class(mod, name):
     mod = __import__(mod, globals(), locals(), [name], 0)
@@ -366,6 +367,7 @@ class QeMeanFieldTask(FireTaskBase):
     def __init__(self, *args, **kwargs):
         super(QeMeanFieldTask, self).__init__(*args, **kwargs)
 
+    def build_inputs(self, dry_run=False):
         # Mandatory Parameters
         self.structure = self.get('structure')
         self.pseudo_dir = self.get('pseudo_dir')
@@ -373,13 +375,11 @@ class QeMeanFieldTask(FireTaskBase):
         self.kpoints_fi = self.get('kpoints_fine')
         self.qshift = self.get('qshift')
         self.fftw_grid = self.get('fftw_grid')
-        self.mpi_cmd = self.get('mpi_cmd')
-        self.pw_cmd = self.get('pw_cmd')
-        self.pw2bgw_cmd = self.get('pw2bgw_cmd')
+        self.mpi_cmd = self.get('mpi_cmd').split()
+        self.pw_cmd = self.get('pw_cmd').split()
+        self.pw2bgw_cmd = self.get('pw2bgw_cmd').split()
         self.mf_tasks = self.get('mf_tasks')
 
-        #print("in QEMFT: structure: {}\npseudo: {}\n, kpt_co: {}\nkpt_fi: {}".format(
-        #        self.structure, self.pseudo_dir, self.kpoints_co, self.kpoints_fi))
         # Other Parameters
         self.reduce_structure = self.get('reduce_structure', False)
         self.bgw_rev_off = self.get('bgw_rev_off', False)
@@ -450,7 +450,9 @@ class QeMeanFieldTask(FireTaskBase):
 
         # Get Primitive Sructure if reducing structure
         if self.reduce_structure:
-            self.__dict__['structure'] = self.structure.get_primitive_structure()
+            from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+            finder = SpacegroupAnalyzer(self.structure)
+            self.__dict__['structure'] = finder.get_primitive_standard_structure()
 
         # Get Kgrids for QEMF
         if self.bandstructure_kpoint_path:
@@ -477,6 +479,10 @@ class QeMeanFieldTask(FireTaskBase):
         # Use QeMFPw2BgwInputs to build PostProcessing Inputs.
         self.__dict__['pw2bgw_inputs'] = QeMFPw2BgwInputs(self.structure,
                         pw2bgw_input=self.pw2bgw_input_dict, mf_tasks=self.mf_tasks)
+
+        # Remove ESPRESSO directory from __init__.qemf_kgrids if dry_run=True for debugging
+        if dry_run:
+            shutil.rmtree('./ESPRESSO')
 
     def write_inputs(self):
         # Write Input Files
@@ -517,19 +523,26 @@ class QeMeanFieldTask(FireTaskBase):
     # Run each Espresso Calculation
     def run_task(self, fw_spec):
         # Write Input files and make Symbolic links
+        self.build_inputs()
         self.write_inputs()
-        sys.exit(0)
+        print("mpi_cmd: {}\npw_cmd: {}\npw2bgw_cmd: {}".format(
+                self.mpi_cmd, self.pw_cmd, self.pw2bgw_cmd) )
+        #sys.exit(0)
         
         # Method for running each Espresso Task
-        def run_qe_task(self, task):
+        def run_qe_task(task):
             os.chdir(task)
-            if qe_task == 'scf' :
-                self.run_pw(self.pw, qe_task)
+            if task == 'scf' :
+                self.run_pw(self.pw_cmd, task)
             else:
-                self.run_pw(self.pw, qe_task, pw2bgwx=self.pw2bgw)
-            self.qe_dirs[qe_task] = os.getcwd()
+                self.run_pw(self.pw_cmd, task, pw2bgwx=self.pw2bgw_cmd)
+            self.prev_dirs['ESPRESSO'][task] = os.getcwd()
             os.chdir("../")
 
+        # Change to Top Level Directory and begin running pw.x
+        ( self.__dict__['output'],
+            self.__dict__['prev_dirs'] ) = {}, {'ESPRESSO': {} }
+        os.chdir("./ESPRESSO")
         for task in self.mf_tasks:
             run_qe_task(task)
         os.chdir("../")
@@ -539,14 +552,14 @@ class QeMeanFieldTask(FireTaskBase):
     def run_pw(self, pwx, dir_name, pw2bgwx=None):
         mpi_pw = list(self.mpi_cmd)
         mpi_pw.extend(pwx)
-        if pw2bgwx and not self.alternate_kpoints:
+        if pw2bgwx and not self.bandstructure_kpoint_path:
             mpi_pw2bgw = list(self.mpi_cmd)
             mpi_pw2bgw.extend(pw2bgwx)
             job = PWJob(mpi_pw, pw2bgw_cmd=mpi_pw2bgw)
         else:
             job = PWJob(mpi_pw)
         handlers = []
-        handlers.append(load_class("pymatgen.io.bgw.handlers", 'QuantumEspressoErrorHandler')())
+        handlers.append(load_class("pymatgen.io.espresso.handlers", 'QuantumEspressoErrorHandler')())
         c = Custodian(handlers=handlers, validators=[], jobs=[job])
         self.output[dir_name] = c.run()
 

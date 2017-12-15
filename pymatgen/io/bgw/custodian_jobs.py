@@ -26,6 +26,7 @@ from pymongo import MongoClient
 
 from pymatgen import Structure
 from pymatgen.io.bgw.outputs import BgwRun, BgwParserError
+from pymatgen.io.espresso.outputs import EspressoRun
 from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, Workflow, LaunchPad
 from custodian.custodian import Job, Custodian
 
@@ -156,7 +157,7 @@ class BgwCustodianTask(FireTaskBase):
         fw = Firework.from_file('FW.json')
         name = fw.name
         m = re.match("[\w\s]+(\d)$", name)
-        if m.groups():
+        if m:
             n_val = "-{}".format(m.group(1))
         else:
             n_val = ""

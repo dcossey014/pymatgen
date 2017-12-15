@@ -13,7 +13,7 @@ __email__ = "dcossey014@gmail.com"
 __status__ = "Beta"
 __date__ = "7/01/17"
 
-import math
+import math, datetime
 import logging
 import os, glob
 
@@ -76,7 +76,7 @@ class BgwErrorHandler(ErrorHandler):
 
         self.errors = set()
         with open(self.output_filename, 'r') as fout:
-            for line in f:
+            for line in fout:
                 l = line.strip()
                 for err, msgs in BgwErrorHandler.error_msgs.items():
                     for msg in msgs:

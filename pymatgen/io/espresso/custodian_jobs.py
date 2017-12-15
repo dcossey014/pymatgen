@@ -106,7 +106,9 @@ class PWJob(Job):
     def postprocess(self):
         print "in PWJob.postprocess"
         print "converting charge-density.dat into XML format"
-        iotk_cmd = os.path.join(os.path.dirname(self.pw_cmd[-1]), 'iotk')
+        os.environ['ESPRESSO_NPROCS'] = self.pw_cmd[2]
+        pw_exe = [i for i in self.pw_cmd if 'pw.x' in i][0]
+        iotk_cmd = os.path.join(os.path.dirname(pw_exe), 'iotk')
         print("iotk cmd: {}".format(iotk_cmd))
         chg_dat = glob.glob('*.save/charge-density.dat')[0]
         chg_xml = os.path.join(os.path.dirname(chg_dat), 'charge-density.xml')

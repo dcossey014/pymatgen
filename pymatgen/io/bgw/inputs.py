@@ -45,7 +45,7 @@ class BgwInputTask(FireTaskBase):
     '''
     
     required_params = ['structure', 'pseudo_dir', 'input_set_params', 'out_file']
-    optional_params = ['kpoints', 'qshift', 'mat_type', 'cmplx_real', 'qemf_dir', 'config_file']
+    optional_params = ['kpoints', 'qshift', 'mat_type', 'cmplx_real', 'qemf_dir', 'config_file', 'reduce_structure']
 
     def __init__(self, params): 
         self.structure = Structure.from_dict(params.get('structure').as_dict()) if params.get('structure', '') else ''
@@ -62,10 +62,14 @@ class BgwInputTask(FireTaskBase):
         #gk: why is occupied_bands set here?
         self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
+        self.reduce_structure = params.get('reduce_structure', False)
 
         #print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
 
         #Build Pseudo Dictionary and List of PPs files if given Structure
+        if self.reduce_structure:
+            self.structure = self.convert2primitive(self.structure)
+
         if self.structure:
             self.pseudo = {}
             self.pseudo_files = []
@@ -89,15 +93,19 @@ class BgwInputTask(FireTaskBase):
         #super(BgwInputTask, self).__init__()
         #self.check_write_params()
         self.update(params)
-        print "gk: in BgwInput.__init__(), self.occupied_bands=",self.occupied_bands
         
+    def convert2primitive(self, s):
+        from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+        finder = SpacegroupAnalyzer(s)
+        return finder.get_primitive_standard_structure()
+
     def __str__(self):
         out = []
         def write_kpoints():
             if not self.kps:
-                kp_dir = self.prev_dirs['ESPRESSO']['wfn']
+                kp_dir = self.prev_dirs['ESPRESSO']['wfn_co']
                 q_shift_dir = self.prev_dirs['ESPRESSO']['wfnq']
-                wfn_out = os.path.join(kp_dir, 'wfn.out')
+                wfn_out = os.path.join(kp_dir, 'wfn_co.out')
 
                 with open(os.path.join(q_shift_dir, 'wfnq.in'), 'r') as fin:
                     lines = fin.readlines()
@@ -107,10 +115,12 @@ class BgwInputTask(FireTaskBase):
 
             qtype = 2 if type == 'metal' else 1
 
+            '''
             for i,j in enumerate(self.kps):
                 k = j.split()
-                self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0\n".format(float(k[0]),
-                                    float(k[1]), float(k[2]))
+                #self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0\n".format(float(k[0]),
+                self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:5.1f}\n".format(float(k[0]),
+                                    float(k[1]), float(k[2]), float(k[3]) )
             
             if self.run_type == 'epsilon':
                 self.kps[0] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0  {3}\n".format(
@@ -121,9 +131,25 @@ class BgwInputTask(FireTaskBase):
                     k = j.split()
                     self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:>3.1f}  0\n".format(
                                     float(k[0]), float(k[1]), float(k[2]), float(k[3]))
+            '''
 
-            for kp in self.kps:
-                out.append("  {}".format(kp.strip()))
+            #for kp in self.kps:
+            #    out.append("  {}".format(kp.strip()))
+
+            if 'epsilon' in self.run_type.lower():
+                self.kps = [[j[0], j[1], j[2], 1.0, 0] for j in self.kps]
+                self.kps[0] = [qshift[0], qshift[1], qshift[2], 1.0, 1]
+
+                out.extend(["  {:.6f}  {:.6f}  {:.6f} {:>4.1f}  {:2d}".format(
+                                j[0], j[1], j[2], j[3], j[4]
+                                ) for j in self.kps ]
+                            )
+            else:
+                out.extend(["  {:.6f}  {:.6f}  {:.6f} {:>3.1f}".format(
+                                j[0], j[1], j[2], 1.0
+                                ) for j in self.kps ]
+                            )
+
             out.append('end')
 
         def write_band_occ():
@@ -536,7 +562,7 @@ class BgwInput(BgwInputTask):
     def __init__(self, structure, pseudo_dir, isp={}, cmplx_real='cmplx',
                 kpoints=None, qshift=None, mat_type='semiconductor',
                 kps=None, occupied_bands = None, filename=None,
-                qemf_dir=None):
+                qemf_dir=None, reduce_structure=False):
 
         self.__dict__['isp'] = isp if isp else {}
         self.__dict__['run_type'] = filename.split('/')[-1].split('.')[0]
@@ -545,7 +571,7 @@ class BgwInput(BgwInputTask):
                 'input_set_params': self.isp, 'mat_type': mat_type,
                 'out_file': filename, 'run_type': self.run_type,
                 'occupied_bands': occupied_bands, 'cmplx_real': cmplx_real,
-                'qemf_dir': qemf_dir}
+                'qemf_dir': qemf_dir, 'reduce_structure': reduce_structure}
 
         super(BgwInput, self).__init__(self.params)
 
@@ -732,7 +758,7 @@ class BgwInput(BgwInputTask):
             ignore_list = ['structure', 'pseudo_dir', 'kpoints', 'qshift', 
                     'isp', 'run_type', 'mat_type', 'filename', 'pseudo', 
                     'pseudo_files', 'occupied_bands', 'kps', 'kgrid', 'cmplx_real','qemf_dir',
-                    'config_file','qe_dirs', 'bgw_dirs']
+                    'config_file','qe_dirs', 'bgw_dirs', 'reduce_structure']
             if key in ignore_list:
                 self.__dict__['params'].update({key:val})
             if key not in ignore_list:

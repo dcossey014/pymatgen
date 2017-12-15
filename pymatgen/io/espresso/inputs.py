@@ -126,7 +126,6 @@ class PwInput(MSONable):
         self.__dict__['reduce_structure'] = reduce_structure
 
 
-        #print("values after user values: {}".format(self.control))
         # If using reduced primite Structure, set that before moving forward
         if self.reduce_structure:
             self.__dict__['structure'] = self.convert2primitive(self.structure)
@@ -155,7 +154,7 @@ class PwInput(MSONable):
             self.pseudo[i.encode('ascii', 'ignore')] = pps[-1].split('/')[-1]
         #print("pseudo: {}".format(self.pesudo))
 
-    def convert2primitive(s):
+    def convert2primitive(self, s):
         finder = SpacegroupAnalyzer(s)
         return finder.get_primitive_standard_structure()
 
@@ -427,8 +426,8 @@ class QeMFInput(MSONable):
                 task_dicts['control'] = {'calculation': i}
 
             d = self.as_dict()
-            with open('debug.out', 'w') as fout:
-                pprint.pprint(d, fout)
+            #with open('debug.out', 'w') as fout:
+            #    pprint.pprint(d, fout)
             for j in ['control', 'system', 'electrons', 'ions', 'cell']:
                 subgroup = d.get(j, {}).get(i, {})
                 #print("IN QEMFINPUT: j = {}\t\ttask: {}".format(j, i))
@@ -894,9 +893,9 @@ class QeMFPw2BgwInputs(MSONable):
             # Setup parameters for input file
             task_dict = self.pw2bgw_input.get(i)
 
-            d = self.as_dict()
-            with open('debug_qepw2bgw.out', 'w') as fout:
-                pprint.pprint(d, fout)
+            #d = self.as_dict()
+            #with open('debug_qepw2bgw.out', 'w') as fout:
+            #    pprint.pprint(d, fout)
             
             setattr(self, i, Pw2BgwInput(self.structure, pw2bgw_input=task_dict,
                                         kpoints=kpoints, kpoints_shift=kpoints_shift,
