@@ -1,1 +1,44 @@
-BGW_DIR: /apps/ccm/opt/BerkeleyGW-1.1-beta2/bin/
+BGW_DIR: /app/ccm/opt/BerkeleyGW-1.2.0-hdf5/bin
+#BGW_DIR: /app/ccm/opt/BerkeleyGW/intel/1.2/bin
+tasks:
+    - scf
+    - wfn
+    - wfnq
+    - wfn_co
+    - wfn_fi
+    - wfnq_fi
+espresso:
+    control:
+        pseudo_dir: /app/ccm/PPs/ONCVPSP/QE
+        tstress: True
+        tprnfor: True
+        verbosity: high
+    system:
+        ecutwfc: 60.0
+    electrons:
+        conv_thr: 1.0e-10
+        diago_full_acc: True
+        diagonalization: cg
+pw2bgw:
+    wfn:
+        wfng_flag: True
+        wfng_kgrid: False
+    wfnq:
+        wfng_flag: True
+        wfng_kgrid: False
+    wfnq_fi:
+        wfng_flag: True
+        wfng_kgrid: False
+    wfn_fi:
+        wfng_flag: True
+        wfng_kgrid: False
+    wfn_co:
+        wfng_flag: True
+        wfng_kgrid: False
+        rhog_flag: True
+        vxc_flag: True
+        vxc_file: vxc.dat
+        vxc_diag_nmin: 1
+        vxc_offdiag_nmin: 0
+        vxc_offdiag_nmax: 0
+

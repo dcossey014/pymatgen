@@ -214,6 +214,7 @@ qemft = bint.QeMeanFieldTask(structure=s, pseudo_dir=pseudo_dir,
         mpi_cmd=mpi_cmd, pw_cmd=pw_cmd, pw2bgw_cmd=pw2bgw_cmd, kpoints_coarse=kpts_co,
         kpoints_fine=kpts_fi, mf_tasks=mean_field_tasks, system=qemft_system, qshift=qshift, 
         fftw_grid=fftw_grid, cmplx_real=cmplx_real, config_file=config_file)
+qemft.build_inputs(dry_run=True)
 
 #qemft = bint.QeMeanFieldTask(structure=s_prim, kpoints=kpoints, pseudo_dir=pseudo_dir,
 #        mpi_cmd=mpi_cmd, pw_cmd=pw_cmd, pw2bgw_cmd=pw2bgw_cmd, qshift=qshift,
@@ -221,7 +222,6 @@ qemft = bint.QeMeanFieldTask(structure=s, pseudo_dir=pseudo_dir,
 #        qe_electrons=qemft_electrons, qe_pw2bgw=qemft_pw2bgw, mf_tasks=mean_field_tasks)
 
 qemf_fw = Firework([qemft], name="QeMeanField")
-sys.exit(0)
 
 eps_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
             kpoints=kpts_co, qshift=qshift, filename='epsilon.inp',
