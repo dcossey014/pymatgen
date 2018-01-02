@@ -210,7 +210,6 @@ qemft_system['wfn_fi']['nbnd'] = nbnd_wfn_fi
 qemft_system['wfnq_fi']['nbnd'] = nbnd_wfnq_fi
 
 config_file='bgw_interface_defaults.yaml'
-print("reduce structure in script: {}".format(rs))
 qemft = bint.QeMeanFieldTask(structure=s, pseudo_dir=pseudo_dir,
         mpi_cmd=mpi_cmd, pw_cmd=pw_cmd, pw2bgw_cmd=pw2bgw_cmd, kpoints_coarse=kpts_co,
         kpoints_fine=kpts_fi, mf_tasks=mean_field_tasks, system=qemft_system, qshift=qshift, 
