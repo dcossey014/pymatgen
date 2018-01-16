@@ -200,6 +200,9 @@ class EspressoRun(MSONable):
     def as_dict(self):
         d = {'structure': self.structure.as_dict(),
              'data_file': self.data,
+             'Energies' : self.energies,
+             'Stress'   : self.stress,
+             'Forces'   : self.forces,
              'band_data': {'kpoints': self.kpoints,
                  'eigenvalues': self.band_data}
              }
