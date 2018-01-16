@@ -170,6 +170,10 @@ class EspressoRun(MSONable):
                 self.data_file = "{}/{}/data-file.xml".format(
                             root, self.save_dir[0]) 
                 self.structure = self._parse_structure(self.scf_dir)
+                fin = "{}/out".format(self.scf_dir)
+
+                with open(fin) as file:
+                    fout = file.readlines()
                 break
         tree = ET.parse(self.data_file)
         xmlroot = tree.getroot()
@@ -182,6 +186,8 @@ class EspressoRun(MSONable):
             self.kpoints = {}
             self.band_data = self._parse_band_data(self.run_dir)
             self.band_data = self._collate_band_data(self.band_data)
+
+        self._parse_output_file(fout)
             
     @property
     def efermi(self):
@@ -225,6 +231,84 @@ class EspressoRun(MSONable):
         plt.savefig(filename, format=filename.split('.')[-1])
 
 
+    def _parse_output_file(self, lines):
+        def _parse_stress(ln):
+            d = {}
+            line=lines[ln].strip().split()
+            d['Pressure'] = line[-1]
+            d['Units'] = line[-3].strip('()')
+            stress = []
+            for line in lines[ln+1:ln+4]:
+                line = line.strip().split()
+                stress.append([float(x) for x in line[-3:]])
+            d['total stress'] = stress
+
+            for i,line in enumerate(lines[ln+5:], start=0):
+                line = line.strip()
+                if line and "kbar" in line:
+                    l = line.split()
+                    header = ' '.join(l[:3])
+                    units = l[2].strip('()')
+                    stress = []
+                    for k in lines[ln+5+i:ln+8+i]:
+                        k = k.strip().split()
+                        stress.append([float(x) for x in k[-3:]])
+                    d[header] = stress
+            return d
+
+        def _parse_forces(ln):
+            l = lines[ln]
+            d = {'Units' : ' '.join(l.strip().split()[-3:]).strip('():')}
+        
+            def _force_parser(header, lb, le):
+                dd = {}
+                for line in lines[lb:le]:
+                    line = line.strip()
+                    if line:
+                        l = line.split()
+                        atom = ' '.join(l[:2])
+                        forces = [float(x) for x in l[-3:]]
+                        dd[atom] = forces
+                return dd
+
+            ln += 1
+            header = "Total Forces"
+            lb = ln
+            for i,line in enumerate(lines[ln:], start=0):
+                l = line.strip().split()
+                le = ln + i
+                if "to forces" in line:
+                    d[header] = _force_parser(header, lb, le)
+                    header = ' '.join(l[1:3])
+                    lb = le + 1
+                if "Total force" in line:
+                    d[header] = _force_parser(header, lb, le)
+                    d['Total Force'] = float(l[3])
+                    d['Total SCF Correction'] = float(l[-1])
+                    break
+            return d
+
+
+        def _parse_energies(ln):
+            d = {'total energy': float(lines[ln].strip().split()[-2]), 
+                    'Units': lines[ln].strip().split()[-1] }
+            d['one-electron contribution'] = float(lines[ln+6].strip().split()[-2])
+            d['hartree contribution'] = float(lines[ln+7].strip().split()[-2])
+            d['xc contribution'] = float(lines[ln+8].strip().split()[-2])
+            d['ewald contribution'] = float(lines[ln+9].strip().split()[-2])
+            return d
+
+        for ln, line in enumerate(lines, start=0):
+            if "total   stress" in line:
+                self.stress = _parse_stress(ln)
+
+            if "!    total energy" in line:
+                self.energies = _parse_energies(ln)
+
+            if "Forces acting on atoms" in line:
+                self.forces = _parse_forces(ln)
+
+        
     def _parse_structure(self, d):
         with open(os.path.join(d, 'in')) as f:
             lines = f.readlines()
