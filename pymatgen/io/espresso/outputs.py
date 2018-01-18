@@ -250,7 +250,7 @@ class EspressoRun(MSONable):
                 line = line.strip()
                 if line and "kbar" in line:
                     l = line.split()
-                    header = ' '.join(l[:3])
+                    header = ' '.join(l[:3]).replace('.', '')
                     units = l[2].strip('()')
                     stress = []
                     for k in lines[ln+5+i:ln+8+i]:
@@ -282,7 +282,7 @@ class EspressoRun(MSONable):
                 le = ln + i
                 if "to forces" in line:
                     d[header] = _force_parser(header, lb, le)
-                    header = ' '.join(l[1:3])
+                    header = ' '.join(l[1:3]).replace('.', '')
                     lb = le + 1
                 if "Total force" in line:
                     d[header] = _force_parser(header, lb, le)
