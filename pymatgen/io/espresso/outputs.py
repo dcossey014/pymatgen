@@ -161,6 +161,7 @@ class EspressoRun(MSONable):
 
         for root, dirs, files in os.walk(run_dir, topdown=True):
             if 'scf' in dirs:
+                self.root_dir = root
                 self.espresso_runs = list(dirs)
             if 'scf' in root.split('/')[-1].lower():
                 self.scf_dir = root
@@ -188,6 +189,7 @@ class EspressoRun(MSONable):
             self.band_data = self._collate_band_data(self.band_data)
 
         self._parse_output_file(fout)
+        self.timings = self._parse_timings()
             
     @property
     def efermi(self):
@@ -203,6 +205,7 @@ class EspressoRun(MSONable):
              'Energies' : self.energies,
              'Stress'   : self.stress,
              'Forces'   : self.forces,
+             'timings'  : self.timings,
              'band_data': {'kpoints': self.kpoints,
                  'eigenvalues': self.band_data}
              }
@@ -310,6 +313,18 @@ class EspressoRun(MSONable):
 
             if "Forces acting on atoms" in line:
                 self.forces = _parse_forces(ln)
+
+
+    def _parse_timings(self):
+        timings = {}
+        for i in self.espresso_runs:
+            with open(os.path.join(self.root_dir, i, 'out')) as fin:
+                lines = fin.readlines()
+            for line in lines:
+                line = line.strip()
+                if line.find("PWSCF") == 0:
+                    timings[i] = line.split()[4]
+        return timings
 
         
     def _parse_structure(self, d):
