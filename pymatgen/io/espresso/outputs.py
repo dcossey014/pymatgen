@@ -318,12 +318,18 @@ class EspressoRun(MSONable):
     def _parse_timings(self):
         timings = {}
         for i in self.espresso_runs:
+            d = {}
             with open(os.path.join(self.root_dir, i, 'out')) as fin:
                 lines = fin.readlines()
             for line in lines:
                 line = line.strip()
-                if line.find("PWSCF") == 0:
-                    timings[i] = line.split()[4]
+                if "s WALL" in line:
+                    l = line.split()
+                    d[l[0]] = {}
+                    d[l[0]]['UNITS'] = "seconds"
+                    d[l[0]]['Walltime'] = float(l[4].strip('s'))
+                    d[l[0]]['Calls'] = l[-2]
+            timings[i] = d
         return timings
 
         
