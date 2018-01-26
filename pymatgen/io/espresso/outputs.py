@@ -29,7 +29,7 @@ import numpy as np
 
 from monty.io import zopen, reverse_readfile
 from monty.re import regrep
-from monty.json import jsanitize, MSONable
+from monty.json import jsanitize, MSONable, json
 
 from pymatgen.util.io_utils import clean_lines, micro_pyawk
 from pymatgen.core.units import unitized
@@ -160,6 +160,11 @@ class EspressoRun(MSONable):
         self.parse_band_data = parse_band_data
 
         for root, dirs, files in os.walk(run_dir, topdown=True):
+            if 'FW.json' in files:
+                fw_file = os.path.join(root, 'FW.json')
+                with open(fw_file, 'r') as fin:
+                    data = json.load(fin)
+                    self.input = data['spec']['_tasks'][0]
             if 'scf' in dirs:
                 self.root_dir = root
                 self.espresso_runs = list(dirs)
@@ -201,6 +206,7 @@ class EspressoRun(MSONable):
         
     def as_dict(self):
         d = {'structure': self.structure.as_dict(),
+             'input'    : self.input,
              'data_file': self.data,
              'Energies' : self.energies,
              'Stress'   : self.stress,
