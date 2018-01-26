@@ -22,6 +22,7 @@ import subprocess
 import shlex
 
 from monty.serialization import loadfn
+from monty.json import json
 from pymongo import MongoClient
 
 from pymatgen import Structure
@@ -115,7 +116,9 @@ class BgwCustodianTask(FireTaskBase):
         #print('prev dirs: {}'.format(prev_dirs))
 
         #Set up Handlers and their Parameters
-        handler_param_dict = {'BgwMemoryHandler': ['run_type']}
+        handler_param_dict = {'BgwMemoryHandler': ['run_type'], 
+                'WalltimeErrorHandler': ['walltime', 'buffer_time'],
+                'BgwErrorHandler': ['run_type']}
 
         hnames = self.get('handlers', [])
         handler_params = self.get('handler_params', {})
@@ -185,7 +188,8 @@ class BgwDB(FireTaskBase):
 
 
         self.prev_dirs = fw_spec.get("PREV_DIRS", None)
-        self.esp_dir = os.path.dirname(self.prev_dirs.get("ESPRESSO", {}).get("scf", None))
+        self.esp_dir = os.path.dirname(os.path.dirname(self.prev_dirs.get("ESPRESSO", 
+                        {}).get("scf", None)))
         self.bgw_dirs = self.prev_dirs.get("BGW", {})
 
         if self.esp_dir:
@@ -201,37 +205,6 @@ class BgwDB(FireTaskBase):
             pp = pprint.PrettyPrinter(indent=2)
             pp.pprint(self.get_dict())
 
-    '''
-    def get_dict(self, esp_dir, bgw_dirs):
-        esp_data = EspressoRun(esp_dir)
-        d = {}
-        for i,r in enumerate(bgw_dirs):
-            out_file = glob.glob(os.path.join(bgw_dirs[r], "OUT.*"))
-
-            if len(out_file) > 1:
-                raise BgwParserError(
-                        "Found more than one output file for "
-                        "Runtype: {}".format(tmp_out.runtype),
-                        {'err': 'Duplicate Run', 'file': out_file[-1]} )
-
-            tmp_out = BgwRun(out_file[0])
-            
-            if tmp_out.runtype not in d.keys() and tmp_out.timings:
-                d.update(tmp_out.as_dict())
-
-            elif tmp_out.runtype in d.keys():
-                raise BgwParserError(
-                        "Found more than one output file for "
-                        "Runtype: {}".format(tmp_out.runtype),
-                        {'err': 'Duplicate Run', 'file': r} )
-            else:
-                raise BgwParserError(
-                        "Could not parse timings.  Make sure the run "
-                        "completed successfully.",
-                        {'err': 'Incomplete Run'} )
-        
-        return (d, esp_data.as_dict())
-    '''
 
     def insert_db(self, run_data):
         connection = MongoClient(self.db_config['host'], self.db_config['port'],
@@ -247,10 +220,15 @@ class BgwDB(FireTaskBase):
 
     def get_dict(self):
         esp_run = self.esp_data.as_dict()
+        with open(os.path.join(self.esp_dir, 'FW.json'), 'r') as fin:
+            data = json.load(fin)
+
         d = {
             'Structure': esp_run['structure'],
             'ESPRESSO': esp_run,
-            'BGW': {}
+            'BGW': {},
+            'started_on'   : data['created_on'],
+            'completed_on' : datetime.datetime.utcnow().isoformat()
             }
 
         for i in self.bgw_dirs:

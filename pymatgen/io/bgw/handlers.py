@@ -16,6 +16,7 @@ __date__ = "7/01/17"
 import math, datetime
 import logging
 import os, glob
+import subprocess as sp
 
 from fireworks import LaunchPad, Firework
 from custodian.custodian import ErrorHandler
@@ -247,7 +248,7 @@ class WalltimeErrorHandler(ErrorHandler):
 
     # This handler will be unrecoverable, but custodian shouldn't raise an
     # error
-    raises_runtime_error = False
+    raises_runtime_error = True
 
     def __init__(self, walltime=None, buffer_time=300):
         """
@@ -281,7 +282,22 @@ class WalltimeErrorHandler(ErrorHandler):
             self.walltime = wt_delta.total_seconds() if wt_delta else int(self.walltime)
 
         else:
-            self.walltime = None
+            try:
+                logger.debug("Attempting to obtain wall time from PBS")
+                job_id = os.environ['PBS_JOBID'].split('.')[0]
+                logger.debug("job_id: {}".format(job_id))
+                data = sp.check_output(['qstat', '-f', job_id]).split('\n')
+                for l in data:
+                    if "Resource_List.walltime" in l:
+                        wt = l.strip().split()[-1].split(':')
+                        logger.debug("wt: {}".format(wt))
+                        break
+                wt_delta = datetime.timedelta(hours=int(wt[0]),
+                        minutes=int(wt[1]),
+                        seconds=int(wt[2])) if len(wt) > 1 else None
+                self.walltime = wt_delta.total_seconds() if wt_delta else int(self.walltime)
+            except:
+                self.walltime = None
 
         self.buffer_time = buffer_time
         self.start_time = datetime.datetime.now()
@@ -289,6 +305,7 @@ class WalltimeErrorHandler(ErrorHandler):
         ##DEC DEBUG
         print("printing: Found this walltime: {}".format(self.walltime))
         logger.info("logging: Found this walltime: {}".format(self.walltime))
+        logger.info("logging: Found this buffer time: {}".format(self.buffer_time))
         ##END DEBUG
 
     def check(self):
@@ -310,5 +327,6 @@ class WalltimeErrorHandler(ErrorHandler):
         return False
 
     def correct(self):
+        backup(BGW_BACKUP_FILES)
         return {"errors": ["Walltime reached"], "actions": None}
 
