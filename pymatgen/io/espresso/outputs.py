@@ -177,6 +177,10 @@ class EspressoRun(MSONable):
                             root, self.save_dir[0]) 
                 self.structure = self._parse_structure(self.scf_dir)
                 fin = "{}/out".format(self.scf_dir)
+                print 
+                print "Parsing Quantum Espresso outputs."
+                print 
+                print "Parsing energies, forces and stresses in",fin
 
                 with open(fin) as file:
                     fout = file.readlines()
@@ -325,6 +329,8 @@ class EspressoRun(MSONable):
         timings = {}
         for i in self.espresso_runs:
             d = {}
+            file='/'.join([self.root_dir, str(i), 'out'])
+            print "Opening",file, "for parsing timings"
             with open(os.path.join(self.root_dir, i, 'out')) as fin:
                 lines = fin.readlines()
             for line in lines:
@@ -333,8 +339,27 @@ class EspressoRun(MSONable):
                     l = line.split()
                     d[l[0]] = {}
                     d[l[0]]['UNITS'] = "seconds"
-                    d[l[0]]['Walltime'] = float(l[4].strip('s'))
-                    d[l[0]]['Calls'] = l[-2]
+                    wtstr=l[4].strip('s')
+                    # account for hours, min, sec
+                    # assumes string like 10h32m51.03s
+                    h=0.0
+                    m=0.0
+                    s=0.0
+                    if 'm' in wtstr:
+                        [hm,secs]=wtstr.split('m')
+                        s=float(secs)
+                        if 'h' in hm: 
+                            [hrs,mins]=hm.split('h')
+                            h=float(hrs)
+                            m=float(mins)
+                        else:
+                            m=float(hm)
+                    else:
+                        s=float(wtstr)
+                    st=3600.0*h+60*m+s
+                    d[l[0]]['Walltime'] = st
+                    if len(l)==9:
+                        d[l[0]]['Calls'] = l[-2]
             timings[i] = d
         return timings
 
