@@ -339,24 +339,20 @@ class EspressoRun(MSONable):
                     l = line.split()
                     d[l[0]] = {}
                     d[l[0]]['UNITS'] = "seconds"
-                    wtstr=l[4].strip('s')
                     # account for hours, min, sec
                     # assumes string like 10h32m51.03s
-                    h=0.0
-                    m=0.0
-                    s=0.0
-                    if 'm' in wtstr:
-                        [hm,secs]=wtstr.split('m')
-                        s=float(secs)
-                        if 'h' in hm: 
-                            [hrs,mins]=hm.split('h')
-                            h=float(hrs)
-                            m=float(mins)
-                        else:
-                            m=float(hm)
+                    # also accounts for spaces in string "10h 32m 51.03s"
+                    m = re.findall(r"(\d+|\d+.\d+)[hms]", l[4])
+                    if len(m) > 2:
+                        st = sum([3600*float(m[0]), 
+                                    60*float(m[1]),
+                                       float(m[2])] )
+                    elif len(m) > 1:
+                        st = sum([60*float(m[0]),
+                                     float(m[1])] )
                     else:
-                        s=float(wtstr)
-                    st=3600.0*h+60*m+s
+                        st = float(m[0])
+
                     d[l[0]]['Walltime'] = st
                     if len(l)==9:
                         d[l[0]]['Calls'] = l[-2]
