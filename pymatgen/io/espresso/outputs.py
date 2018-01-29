@@ -207,10 +207,19 @@ class EspressoRun(MSONable):
     @property
     def rec_lattice(self):
         return self.structure.lattice.reciprocal_lattice
+
+    @property
+    def spacegroup(self):
+        return self.structure.get_space_group_info()
+
+    @property
+    def pretty_formula(self):
+        return self.structure.composition.reduced_formula
         
     def as_dict(self):
         d = {'structure': self.structure.as_dict(),
              'input'    : self.input,
+             'pretty_formula'  : self.pretty_formula,
              'data_file': self.data,
              'Energies' : self.energies,
              'Stress'   : self.stress,
@@ -341,7 +350,9 @@ class EspressoRun(MSONable):
                     d[l[0]]['UNITS'] = "seconds"
                     # account for hours, min, sec
                     # assumes string like 10h32m51.03s
-                    m = re.findall(r"(\d+|\d+.\d+)[hms]", l[4])
+                    # accounts for spaces in time string as well: "10h 32m 51.03s"
+                    n = line.split("CPU")
+                    m = re.findall(r"(\d+|\d+.\d+)[hms]", n[1])
                     if len(m) > 2:
                         st = sum([3600*float(m[0]), 
                                     60*float(m[1]),
