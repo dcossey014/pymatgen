@@ -341,7 +341,6 @@ class EspressoRun(MSONable):
                     d[l[0]]['UNITS'] = "seconds"
                     # account for hours, min, sec
                     # assumes string like 10h32m51.03s
-                    # also accounts for spaces in string "10h 32m 51.03s"
                     m = re.findall(r"(\d+|\d+.\d+)[hms]", l[4])
                     if len(m) > 2:
                         st = sum([3600*float(m[0]), 
