@@ -86,30 +86,30 @@ class SimplePWTask(FireTaskBase):
 
 class PWJob(Job):
     def __init__(self, pw_cmd, pw2bgw_cmd=None, output_file="out"):
-        print "in PWJob.__init__"
+        logger.debug("in PWJob.__init__")
         self.pw_cmd=pw_cmd
         self.pw2bgw_cmd = pw2bgw_cmd
         self.output_file=output_file
-        print("pw_cmd: {}".format(self.pw_cmd))
+        logger.debug("pw_cmd: {}".format(self.pw_cmd))
 
     def setup(self):
         print "in PWJob.setup"
 
     def run(self):
         cmd=list(self.pw_cmd)
-        print "in PWJob.run, cmd = ", cmd
+        logger.debug("in PWJob.run, cmd = {}".format(cmd))
         fin=open("in",'r')
         with open(self.output_file, 'w') as f:
             p = subprocess.Popen(cmd, stdin=fin, stdout=f, stderr=subprocess.STDOUT)
         return p
 
     def postprocess(self):
-        print "in PWJob.postprocess"
-        print "converting charge-density.dat into XML format"
+        logger.debug("in PWJob.postprocess")
+        logger.debug("converting charge-density.dat into XML format")
         os.environ['ESPRESSO_NPROCS'] = self.pw_cmd[2]
         pw_exe = [i for i in self.pw_cmd if 'pw.x' in i][0]
         iotk_cmd = os.path.join(os.path.dirname(pw_exe), 'iotk')
-        print("iotk cmd: {}".format(iotk_cmd))
+        logger.debug("iotk cmd: {}".format(iotk_cmd))
         chg_dat = glob.glob('*.save/charge-density.dat')[0]
         chg_xml = os.path.join(os.path.dirname(chg_dat), 'charge-density.xml')
         p = subprocess.Popen([iotk_cmd, 'convert', chg_dat, chg_xml])
@@ -117,7 +117,7 @@ class PWJob(Job):
 
         if self.pw2bgw_cmd:
             cmd=list(self.pw2bgw_cmd)
-            print "running PostProcessing with: ", cmd
+            logger.debug("running PostProcessing with: {}".format(cmd))
             fin=open('pp_in', 'r')
             with open('pp_out', 'w') as f:
                 p = subprocess.Popen(cmd, stdin=fin, stdout=f, stderr=subprocess.STDOUT)

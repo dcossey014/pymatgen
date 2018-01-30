@@ -162,7 +162,6 @@ class WalltimeErrorHandler(ErrorHandler):
         self.start_time = datetime.datetime.now()
         self.prev_check_time = self.start_time
         ##DEC DEBUG
-        print("printing: Found this walltime: {}".format(self.walltime))
         logger.info("logging: Found this walltime: {}".format(self.walltime))
         ##END DEBUG
 

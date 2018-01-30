@@ -44,13 +44,11 @@ class BGWJob(Job):
     Docstring
     '''
     def __init__(self, bgw_cmd, pp_cmd=None, output_file="out"):
-        print "in BGWJob.__init__"
         logger.debug("in BGWJob.__init__")
 
         self.bgw_cmd=bgw_cmd
         self.pp_cmd = pp_cmd
         self.output_file=output_file
-        print("bgw_cmd: {}".format(self.bgw_cmd))
         logger.debug("bgw_cmd: {}".format(self.bgw_cmd))
 
     def setup(self):
@@ -58,14 +56,12 @@ class BGWJob(Job):
 
     def run(self):
         cmd=list(self.bgw_cmd)
-        print "in BGWJob.run, cmd = ", cmd
         logger.debug("in BGWJob.run, cmd = ", cmd)
         with open(self.output_file, 'w') as f:
             p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
         return p
 
     def postprocess(self):
-        print "in BGWJob.postprocess"
         logger.debug("in BGWJob.postprocess")
         if self.pp_cmd:
             #print("pp_cmd: {}".format(self.pp_cmd))
