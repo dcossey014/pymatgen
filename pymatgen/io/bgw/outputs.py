@@ -300,7 +300,8 @@ class BgwRun(MSONable):
                 'Revision': self.rev,
                 'Complex/Real': self.cmplx_real}
         d['Memory Usage'] = {'Required Memory': self.mem_req,
-                            'Available Memory': self.mem_avail}
+                            'Available Memory': self.mem_avail,
+                            'UNITS': 'MB per PE'}
         d['Input'] = self.inp_params
         d['Output'] = {'Timings': self.timings}
         output = d['Output']
