@@ -226,9 +226,9 @@ class BgwDB(FireTaskBase):
         d = {
             'Structure': esp_run['structure'],
             'ESPRESSO': esp_run,
-            'pretty_formula' : esp_run.pretty_formula,
-            'spacegroup'  : esp_run.spacegroup[0],
-            'spacegroup_number' : esp_run.spacegroup[1],
+            'pretty_formula' : self.esp_data.pretty_formula,
+            'spacegroup'  : self.esp_data.spacegroup[0],
+            'spacegroup_number' : self.esp_data.spacegroup[1],
             'BGW': {},
             'started_on'   : data['created_on'],
             'completed_on' : datetime.datetime.utcnow().isoformat()
