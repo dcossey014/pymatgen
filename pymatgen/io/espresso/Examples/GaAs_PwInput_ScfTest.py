@@ -127,7 +127,8 @@ fftdum,number_bands=gsphere(screening_cutoff)
 
 # Three Different Cases for config_file: Absolute Path, 
 # Relative Path, and Automatic Search in HOME directory
-config_file = '/Users/pettt/tmp/pymatgen/pymatgen/io/espresso/espresso_interface_defaults.yaml'
+#config_file = '/Users/pettt/tmp/pymatgen/pymatgen/io/espresso/espresso_interface_defaults.yaml'
+config_file = 'espresso_interface_defaults.yaml'
 #config_file = 'espresso_interface_defaults2.yaml'
 #config_file = None
 
@@ -136,13 +137,13 @@ config_file = '/Users/pettt/tmp/pymatgen/pymatgen/io/espresso/espresso_interface
 # Automatic Case
 kps_mode = 'automatic'
 kps = [8,8,8]
-kps_shift = [0.5, 0.5, 0.5]
+kps_shift = [1,1,1]
 qshift = [0,0,0]
 
 # Crystal Case
 """
 kps_mode = 'crystal'
-kps = ['  120',
+kps = ['  4',
         '  0.062500000  0.062500000  0.062500000   1.0\n',
         '  0.062500000  0.062500000  0.187500000   3.0\n',
         '  0.062500000  0.062500000  0.312500000   3.0\n',
@@ -155,5 +156,5 @@ qe_scf = PwInput(s, kpoints_mode=kps_mode, kpoints_grid=kps,
                 kpoints_shift=kps_shift, config_file=config_file)
 qe_scf.system['ecutwfc'] = 30
 
-qe_scf.write_file('scf.in')
+qe_scf.to_file('scf.in')
 
