@@ -203,15 +203,21 @@ cmplx_bool = True if 'cmplx' in cmplx_real.lower() else False
 
 mean_field_tasks=['scf','wfn','wfnq','wfn_co','wfn_fi','wfnq_fi']
 
+#scf_system.ecutwfc=e_cut_mean_field
+scf_system={'ecutwfc': e_cut_mean_field }
+
 qemft_system = {}
 for i in mean_field_tasks:
-    qemft_system[i] = {}
+    #qemft_system[i] = {}
+    qemft_system[i] = copy.deepcopy(scf_system)
 
 qemft_system['wfn']['nbnd'] = nbnd_wfn
 qemft_system['wfnq']['nbnd'] = nbnd_wfnq
 qemft_system['wfn_co']['nbnd'] = nbnd_wfn_co
 qemft_system['wfn_fi']['nbnd'] = nbnd_wfn_fi
 qemft_system['wfnq_fi']['nbnd'] = nbnd_wfnq_fi
+
+
 
 config_file='bgw_interface_defaults.yaml'
 qemft = bint.QeMeanFieldTask(structure=s, pseudo_dir=pseudo_dir,
