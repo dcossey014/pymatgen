@@ -41,6 +41,7 @@ from pymatgen.io.bgw.kgrid import Generate_Kpath
 from pymatgen import Structure
 
 from copy import deepcopy as dcopy
+import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,15 @@ class EspressoRun(MSONable):
                 with open(fw_file, 'r') as fin:
                     data = json.load(fin)
                     self.input = data['spec']['_tasks'][0]
+                    # add contents of yaml file to input
+                    defaults_yaml=os.path.join(os.path.expanduser('~'),self.input["config_file"])
+                    with open(defaults_yaml,'r') as defaults:
+                        try:
+                            def_dict=yaml.load(defaults)
+                        except yaml.YAMLError as exc:
+                            print(exc)
+                    self.input["defaults"]=def_dict
+
             if 'scf' in dirs:
                 self.root_dir = root
                 self.espresso_runs = list(dirs)
