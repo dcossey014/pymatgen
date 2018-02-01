@@ -188,6 +188,7 @@ class BgwDB(FireTaskBase):
                         {}).get("scf", None)))
         self.bgw_dirs = self.prev_dirs.get("BGW", {})
 
+        # call parsers and put them into class attributes (dictionaries)
         if self.esp_dir:
             self.esp_data = EspressoRun(self.esp_dir)
         if self.bgw_dirs:
@@ -227,7 +228,8 @@ class BgwDB(FireTaskBase):
             'spacegroup_number' : self.esp_data.spacegroup[1],
             'BGW': {},
             'started_on'   : data['created_on'],
-            'completed_on' : datetime.datetime.utcnow().isoformat()
+            'completed_on' : datetime.datetime.utcnow().isoformat(),
+            'directories' : {'ESPRESSO': self.esp_dir, 'BGW': self.bgw_dirs}
             }
 
         for i in self.bgw_dirs:

@@ -506,6 +506,7 @@ class BgwInputTask(FireTaskBase):
             "wfnq_fi": self.qemf_dir+"/wfnq_fi",
             "wfn_co": self.qemf_dir+"/wfn_co"
         }
+        self.prev_dirs={ 'ESPRESSO': self.qe_dirs }
         print 'qe_dirs=',self.qe_dirs
 
         # hard-wire kludge: expecting files to be in current directory
