@@ -231,7 +231,7 @@ krn_inp.screening_semiconductor = True
 krn_fw = bint.BgwFirework(krn_inp, name="Kernel Task", complex=cmplx_bool,  mpi_cmd=mpi_cmd_lg)
 krn_fw.add_handler('BgwMemoryHandler', run_type='kernel')
 krn_fw.add_spec('_queueadapter', {'walltime': '4:00:00', 'nnodes': 8, 'ppnode': 36,
-                                  'mppwidth': 36, 'queue': 'debug'})
+                                  'mppwidth': 36, 'queue': 'standard'})
 
 abs_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
                 qshift=qshift, filename='absorption.inp',
