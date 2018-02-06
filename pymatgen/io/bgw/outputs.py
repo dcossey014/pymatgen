@@ -15,6 +15,7 @@ from six.moves import map, zip
 from six import string_types
 
 import numpy as np
+from sklearn.metrics import mean_squared_error
 
 from monty.io import zopen, reverse_readfile
 from monty.re import regrep
@@ -142,42 +143,69 @@ class XmlDictConfig(dict):
         
 
 class BgwRun(MSONable):
-    def __init__(self, dir_name):
+    # Parses a BGW subtask output. Called from BgwDB.run_task() in 
+    # custodian_job.py
+    def __init__(self, runtype, dir_name):
         self.dirname = dir_name
+        self.runtype = runtype
+        print("Processing",runtype,"in BgwRun")
+        print("gk: in BgwRun.__init__, self.dirname=",self.dirname)
+        # get OUT.* file
         self.output_filename = self._find_outputs(self.dirname)
         with zopen(self.output_filename, 'rt') as f:
             self._parse(f)
 
 
     def _parse(self, stream):
+        # This is where the parsing of various BGW programs is done
         lines = stream.readlines()
         self.mem_req = 0.0
-        self.runtype = 'unset'
         self.band_data = {}
         self.timings = {}
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if line.find("BerkeleyGW branch") == 0:
-                self._parse_version(line)
-            if line.find("version, run") != -1:
-                self._parse_runtype(line) 
-            if "MB per PE" in line:
-                self._parse_memory(line) 
-            if "grid)" in line:
-                self._parse_band_info(line) 
-            if "CPU (s)" in line:
-                self._parse_timings(i, lines) 
-            if line.find("Number of bands") != -1:
-                self.num_bands = int(line.split()[-1])
 
-            if "Sigma" in self.runtype and "Symmetrized values" in line:
+        def _parse_out_file(lines):
+            # Parse common features of OUT.xxx
+
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if line.find("BerkeleyGW branch") == 0:
+                    self._parse_version(line)
+                if line.find("version, run") != -1: 
+                    self._parse_cmplx_real(line) 
+                if "MB per PE" in line:
+                    self._parse_memory(line) 
+                if "grid)" in line:
+                    self._parse_band_info(line) 
+                if "CPU (s)" in line:
+                    # this has some runtype dependancies
+                    self._parse_timings(i, lines) 
+                if line.find("Number of bands") != -1:
+                    self.num_bands = int(line.split()[-1])
+
+        # call _parse_out_file for all, i.e. epsilon, sigma, kernel, absorption
+        _parse_out_file(lines)
+
+        if "epsilon" in self.runtype:
+            print("Processing additional Epsilon data")
+            # parse epsilon.log in the epsilon directory
+            self._parse_epsilon_log()
+            # parse ch_converged.dat in the epsilon directory
+            self._parse_epsilon_conv()
+
+        if "sigma" in self.runtype:
+            self.band_avgs = {} 
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if "Symmetrized values" in line:
                     self._parse_sigma_band_avg(i, self.num_bands, lines) 
-
-        if "Sigma" in self.runtype:
+            # parse sigma ch_convergence.dat
             self._parse_ch_convergence() 
 
+        if "kernel" in self.runtype:
+            pass
+
         self.absorption = {}
-        if "Absorption" in self.runtype: 
+        if "absorption" in self.runtype: 
             self.dirname = os.path.dirname(os.path.abspath(self.output_filename))
             if 'absorption_eh.dat' in os.listdir(self.dirname):
                 self._parse_absorption(os.path.join(self.dirname,
@@ -196,11 +224,10 @@ class BgwRun(MSONable):
             self.mem_req += float(l.split()[-4])
             logger.debug('setting memory required: {}'.format(self.mem_req))
 
-    def _parse_runtype(self, stream):
+    def _parse_cmplx_real(self, stream):
         l = stream.split()
-        self.runtype = l[0]
         self.cmplx_real = l[2]
-        if "Sigma" in self.runtype:
+        if "sigma" in self.runtype:
             self.band_avgs = {} 
 
         # Parse Input of run
@@ -225,6 +252,144 @@ class BgwRun(MSONable):
         if 'Fermi' in stream:
             self.fermi_nrg, self.fermi_units = (l[-2], l[-1])
 
+    def _parse_epsilon_log(self):
+
+        self.epsilon_log={}
+        eps_fh=open(os.path.join(self.dirname,'epsilon.log'))
+        
+        iqpt=0
+        qpts=[]
+        num_g_min=99999999
+        epsinv_min=1.0
+        epsinv_off_max=0.0
+    
+        line=eps_fh.readline() 
+        while line:
+            while line:
+                if "q=" in line:
+                    ll=line.split()
+                    qpt=[float(ll[1]),float(ll[2]),float(ll[3])]
+                    qpts.append(qpt)
+                    break
+                line=eps_fh.readline() 
+    
+            while line:
+                if 'inverse epsilon' in line:
+                    break
+                line=eps_fh.readline() 
+    
+            line=eps_fh.readline() 
+            G_1=[]
+            G_2=[]
+            epsinv=[]
+            num_g=0
+            while line:
+                if line in [' \n', ' \r\n', '\n', '\r\n']:
+                    break
+                ll=line.split()
+                g1=[int(ll[0]), int(ll[1]), int(ll[2])]
+                g2=[int(ll[3]), int(ll[4]), int(ll[5])]
+                epsinv_r=float(ll[6])
+                if len(ll) == 8:
+                    epsinv_c=float(ll[7])
+                else:
+                    epsinv_c=0.0
+                epsinv_len=math.sqrt(epsinv_r**2+epsinv_c**2)
+            
+                G_1.append(g1)
+                G_2.append(g2)
+                epsinv.append(epsinv_len)
+                
+                num_g=num_g+1
+                line=eps_fh.readline() 
+    
+            line=eps_fh.readline() 
+            num_g_min=min(num_g,num_g_min)
+            epsinv_min=min(epsinv_len,epsinv_min)
+            epsinv_off_max=max(epsinv[num_g-2],epsinv_off_max)
+    
+        self.epsilon_log["minimum number of G vectors"]=num_g_min
+        self.epsilon_log["minimum EpsilonInverse_GmxGmx"]=epsinv_min
+        self.epsilon_log["maximum EpsilonInverse_Gmx(Gmx-1)"]=epsinv_off_max
+    
+        eps_fh.close()
+        
+
+    def _parse_epsilon_conv(self):
+    
+        self.epsilon_chi_convergence={}
+    
+        # arrays for sorted plot
+        number_bands=[]
+        labels_00=[]
+        labels_MM=[]
+    
+        #for file_name in files_list:
+        chi_fh=open(os.path.join(self.dirname,'chi_converge.dat'))
+        
+        iqpt=0
+        qpts=[]
+        chi00mx=[]       #  chi_00(q,0) with maximum number of bands, G=0  
+        chi00mx_extr=[]  #  chi_00(q,0) extrapolated valule with maximum number of bands  
+        chi00mx_err=[]   #  chi_00(q,0) error with respect to extrapolated value
+        chiMMmx=[]       #  chi_GmGm(q,0) with maximum number of bands Gm=G_max
+        chiMMmx_extr=[]  #  chi_GmGm(q,0) with maximum number of bands extrapolated value
+        chiMMmx_err=[]   #  chi_GmGm(q,0) with maximum number of bands error wrt extrapolated
+    
+        outstrs=[]
+    
+        line=chi_fh.readline() 
+        while line:
+            while line:
+                if "q=" in line:
+                    #print line
+                    (s1,s2,qx,qy,qz,s3,s4)=line.split()
+                    qpt=[float(qx),float(qy),float(qz)]
+                    qpts.append(qpt)
+                    break
+            line=chi_fh.readline()
+            line=chi_fh.readline()
+            ibnd=0
+            while line:
+                #print line
+                if line in [' \n', ' \r\n', '\n', '\r\n']:
+                    #print "blank line:",line
+                    break
+                (i, chi00, extrp00, chiGmGm, extrpGmGm) = line.split()
+                ibnd=int(i)
+                line=chi_fh.readline()
+            # at max number of bands. collect data for each kpoint
+            chi00mx.append(float(chi00))
+            chi00mx_extr.append(float(extrp00))
+            chi00mx_err.append(-float(extrp00)+float(chi00))
+            chiMMmx.append(float(chiGmGm))
+            chiMMmx_extr.append(float(extrpGmGm))
+            chiMMmx_err.append(-float(extrpGmGm)+float(chiGmGm))
+            iqpt=iqpt+1
+            line=chi_fh.readline()
+            num_qpts=iqpt
+            num_bands=ibnd
+        number_bands.append(num_bands)
+        outstrs.append("# number of bands = "+str(num_bands)+" used in chi\n")
+        outstrs.append("# number of q-points="+str(num_qpts)+"\n")
+        outstrs.append("# chi00mx,  chi00mx_extr, chi00mx_err,  chiMMmx,  chiMMmx_extr, chiMMmx_err\n")
+        for iqpt in range(0,num_qpts):
+            outstrs.append("%12.8f %12.8f %12.8f %12.8f %12.8f %12.8f\n" % (chi00mx[iqpt], chi00mx_extr[iqpt], chi00mx_err[iqpt], 
+                chiMMmx[iqpt], chiMMmx_extr[iqpt], chiMMmx_err[iqpt]))
+        
+        chi00_rmse=math.sqrt(mean_squared_error(chi00mx_extr,chi00mx))
+        chiMM_rmse=math.sqrt(mean_squared_error(chiMMmx_extr,chiMMmx))
+        chi00_abse=np.array(chi00mx_err)
+        chi00_maxe=np.amax(chi00_abse)
+        chiMM_abse=np.array(chiMMmx_err)
+        chiMM_maxe=np.amax(chiMM_abse)
+    
+        self.epsilon_chi_convergence["errors vs qpoints table"]=outstrs
+        self.epsilon_chi_convergence["chi_00(q,0) RMSE"]=chi00_rmse
+        self.epsilon_chi_convergence["chi_00(q,0) Max Error"]=chi00_maxe
+        self.epsilon_chi_convergence["chi_GmGm(q,0) RMSE"]=chiMM_rmse
+        self.epsilon_chi_convergence["chi_00(q,0) Max Error"]=chiMM_maxe
+
     def _parse_sigma_band_avg(self, i, j, stream):
         kpt = stream[i+2].strip().split()[2:5]
         kpt = [k.replace('.', ',') for k in kpt]
@@ -240,8 +405,8 @@ class BgwRun(MSONable):
     def _parse_timings(self, i, stream):
         for line in stream[i+2:]:
             l = line.strip()
-            if self.runtype == 'Epsilon' and len(l.split()) > 3 or \
-                    self.runtype == 'Sigma' and len(l.split()) > 3:
+            if self.runtype == 'epsilon' and len(l.split()) > 3 or \
+                    self.runtype == 'sigma' and len(l.split()) > 3:
                 m = re.match(
                     "([a-zA-Z ()-/_.0-9]+)[ :]+ (\d+.\d+)\s+"+\
                             "(\d+.\d+)\s+(\d+)", l)
@@ -296,6 +461,8 @@ class BgwRun(MSONable):
 
 
     def as_dict(self):
+        # this is where the data gets put into an overall dictionary
+        # for each BGW task when called by BgwDB.get_dict()
         d = {'BGW Version': self.ver,
                 'Revision': self.rev,
                 'Complex/Real': self.cmplx_real}
@@ -310,14 +477,18 @@ class BgwRun(MSONable):
                 'Min Conduction Band': self.cond_min_nrg,
                 'Fermi Energy': self.fermi_nrg,
                 'Units': self.val_units}
-        if "Sigma" in self.runtype:
+        if "epsilon" in self.runtype:
+            output["Chi Convergence"] = self.epsilon_chi_convergence
+            output["Epsilon Log"] = self.epsilon_log
+        if "sigma" in self.runtype:
             output['Sigma Band Avgs'] = self.band_data
-            output['CH Convergence'] = self.ch_convergence
+            output['Chi Convergence'] = self.ch_convergence
 
-        if "Absorption" in self.runtype:
+        if "absorption" in self.runtype:
             output['Dielectric Functions'] = self.absorption
                
-        return {self.runtype: d}
+        #return {self.runtype: d}
+        return d
 
 
     def _parse_ch_convergence(self):
@@ -370,97 +541,6 @@ class BgwRun(MSONable):
                     {'err': 'Too few/many Output Files', 
                     'directory': dirname} )
         
-
-
-
-class QeBgwRun(MSONable):
-    def __init__(self, dirname='.'):
-        self.dirname = dirname
-        self.bgw_types = ['epsilon', 'sigma', 'kernel', 'absorption']
-        esp_dirs = []
-        bgw_outputs = []
-        for root, dirs, files in os.walk(self.dirname):
-            if "ESPRESSO" in dirs:
-                esp_dirs.append(os.path.join(root, "ESPRESSO"))
-
-            out_file = glob.glob(os.path.join(root, "OUT*"))
-            if out_file:
-                bgw_outputs.append(out_file[0])
-
-        try:
-            lp = Launchpad.from_file(os.path.join(os.environ['HOME'], '.fireworks', 'my_launchpad.yaml'))
-            for i,esp_run in  enumerate(esp_dirs):
-                #TODO: remove esp_run from esp_dirs???  Look Into this, might not be necessary
-                fw_id = self._get_fw_id(os.path.dirname(esp_run))
-                wf = lp.get_wf_summary_dict(fw_id)
-                wf_states = wf['states']
-                wf_dirs = wf['launch_dirs']
-                incomplete = []
-                for rtype, state in wf_states.items():
-                    if state != "COMPLETED":
-                        incomplete.append("{}: {}".format(rtype, wf_states[rtype]))
-                if incomplete:
-                    print("Incomplete runs:")
-                    print('\n'.join(i for i in incomplete))
-                    print("Will not compile the information at this time")
-                    continue
-
-                self.esp_data = EspressoRun(esp_run)
-                #TODO: remove each BGWrun from bgw_outputs
-                # Remove esp_dir from wf_dirs such that we don't scan it as 
-                # bgw_run
-                bgw_wf_runs = []
-                for k,v in wf_dirs.items():
-                    v = v[0]
-                    edir = esp_run.split('/')[-2]
-                    if not edir in v:
-                        bgw_wf_runs.append(v)
-                    else:
-                        continue
-
-                for i,bgw_run in wf_dirs.items():
-                    pass
-
-            #for fout in bgw_outputs:
-            #    fw_id = self._get_fw_id(os.path.dirname(fout))
-            #    linked_runs = lp.get_wf_summary_dict(fw_id)['launch_dirs'] 
-        except:
-            print("Unable to contact LaunchPad Server to verify "
-                    "links between runs.  Continuing as if directory "
-                    "contains only runs from single Molecular System.")
-            if bgw_outputs:
-                self.bgw_runs = self._parse_bgw_outputs(bgw_outputs)
-
-
-    def _get_fw_id(self, dir):
-        fw = Firework.from_file(os.path.join(dir, 'FW.json'))
-        return fw.fw_id
-
-
-    def _parse_bgw_outputs(self, bgw_files):
-        print("working with these outputs: {}".format(bgw_files))
-        d = {}
-        for i in bgw_files:
-            print("working on file: {}".format(i))
-            tmp_out = BgwRun(i)
-            if tmp_out.runtype not in d.keys() and tmp_out.timings:
-                d.update(tmp_out.as_dict())
-            elif tmp_out.runtype in d.keys():
-                raise BgwParserError(
-                        "Found more than one output file for "
-                        "Runtype: {}".format(tmp_out.runtype), 
-                        {'err': 'Duplicate Run', 'file': i} )
-            else:
-                raise BgwParserError(                                                           
-                        "Could not parse timings.  Make sure the run "
-                        "completed successfully.",
-                        {'err': 'Incomplete Run'} )
-        return d
-
-    def as_dict(self):
-        d = {'ESPRESSO': self.esp_runs.as_dict(), 'BGW': self.bgw_runs}
-        return d
-
 
 class BgwParserError(Exception):
     def __init__(self, msg, err):

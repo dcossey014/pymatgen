@@ -27,7 +27,7 @@ from pymongo import MongoClient
 from pymatgen import Structure
 from pymatgen.io.espresso.inputs import PWInput, PwInputError
 from pymatgen.io.espresso.outputs import EspressoRun, PWOutput
-from pymatgen.io.bgw.outputs import BgwRun, BgwParserError
+from pymatgen.io.bgw.outputs import BgwParserError
 from fireworks import Firework, FireTaskBase, FWAction, explicit_serialize, Workflow, LaunchPad
 from custodian.custodian import Job, Custodian
 

@@ -37,8 +37,6 @@ def load_class(mod, name):
 
 logger = logging.getLogger(__name__)
 
-#gk: having BGW stuff in pwscf_tasks is confusing
-
 class BGWJob(Job):
     '''
     Docstring
@@ -141,7 +139,7 @@ class BgwCustodianTask(FireTaskBase):
             else:
                 handlers.append(load_class("pymatgen.io.bgw.handlers", n)())
     
-            print("runnung {} Handler with params: {}".format(n, np))
+            print("running {} Handler with params: {}".format(n, np))
             logger.info("runnung {} Handler with params: {}".format(n, np))
 
         logger.info("creating BGWJob")
@@ -188,12 +186,16 @@ class BgwDB(FireTaskBase):
                         {}).get("scf", None)))
         self.bgw_dirs = self.prev_dirs.get("BGW", {})
 
-        # call parsers and put them into class attributes (dictionaries)
+        # Call parsers and put them into class attributes (dictionaries)
+
+        # This is where the Espresso output processing gets called
         if self.esp_dir:
             self.esp_data = EspressoRun(self.esp_dir)
+
+        # This is where the BGW output processing gets called
         if self.bgw_dirs:
             for i in self.bgw_dirs:
-                setattr(self, i, BgwRun(self.bgw_dirs[i]))
+                setattr(self, i, BgwRun(i,self.bgw_dirs[i]))
 
         # Upload to MongoDB or return a PrettyPrint Dictionary
         if self.upload:
