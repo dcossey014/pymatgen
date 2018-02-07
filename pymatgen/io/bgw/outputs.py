@@ -200,6 +200,8 @@ class BgwRun(MSONable):
                     self._parse_sigma_band_avg(i, self.num_bands, lines) 
             # parse sigma ch_convergence.dat
             self._parse_ch_convergence() 
+            # parese sigma band energies in eqp1.dat
+            self._parse_eqp1_dat()
 
         if "kernel" in self.runtype:
             pass
@@ -263,6 +265,13 @@ class BgwRun(MSONable):
         epsinv_min=1.0
         epsinv_off_max=0.0
     
+        #line=eps_fh.readline() 
+        #while line:
+        #    if "Screened Coulomb cutoff" in line:
+        #    if "Total number of bands" in line:
+        #        break
+        #    line=eps_fh.readline() 
+    
         line=eps_fh.readline() 
         while line:
             while line:
@@ -271,6 +280,22 @@ class BgwRun(MSONable):
                     qpt=[float(ll[1]),float(ll[2]),float(ll[3])]
                     qpts.append(qpt)
                     break
+                line=eps_fh.readline() 
+    
+            while line:
+                if 'independent matrix elements of chi' in line:
+                    break
+                line=eps_fh.readline() 
+    
+            # gather g**2
+            line=eps_fh.readline() 
+            line=eps_fh.readline() 
+            line=eps_fh.readline() 
+            while line:
+                if not line.strip():
+                    break
+                lchi=line.split()
+                glensqr=lchi[3]
                 line=eps_fh.readline() 
     
             while line:
@@ -305,14 +330,34 @@ class BgwRun(MSONable):
     
             line=eps_fh.readline() 
             num_g_min=min(num_g,num_g_min)
-            epsinv_min=min(epsinv_len,epsinv_min)
-            epsinv_off_max=max(epsinv[num_g-2],epsinv_off_max)
+            if epsinv_len < epsinv_min:
+                epsinv_min=epsinv_len
+                g1len_min=g1
+                qpt_min=qpt
+                glensqr_min=glensqr
+                g1_min=g1
+                g2_min=g2
     
-        self.epsilon_log["minimum number of G vectors"]=num_g_min
-        self.epsilon_log["minimum EpsilonInverse_GmxGmx"]=epsinv_min
-        self.epsilon_log["maximum EpsilonInverse_Gmx(Gmx-1)"]=epsinv_off_max
+            if epsinv[num_g-2] > epsinv_off_max:
+                epsinv_off_max=epsinv[num_g-2]
+                qpt_max=qpt
+                g1_max=G_1[num_g-2]
+                g2_max=G_2[num_g-2]
     
+
+        self.epsilon_log["minimum inverse(epsilon)_Gmax,Gmax"]={}
+        self.epsilon_log["minimum inverse(epsilon)_Gmax,Gmax"]["matrix element"]=epsinv_min
+        self.epsilon_log["minimum inverse(epsilon)_Gmax,Gmax"]["Gmax"]=g1_min
+        self.epsilon_log["minimum inverse(epsilon)_Gmax,Gmax"]["distance squared Gmax from origin"]=glensqr_min
+        self.epsilon_log["minimum inverse(epsilon)_Gmax,Gmax"]["q-point"]=qpt_min
+
+        self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]={}
+        self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["matrix element"]=epsinv_off_max
+        self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["Gmax"]=g1_max
+        self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["Gmax-1"]=g2_max
+        self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["q-point"]=qpt_max
         eps_fh.close()
+
         
 
     def _parse_epsilon_conv(self):
@@ -481,8 +526,9 @@ class BgwRun(MSONable):
             output["Chi Convergence"] = self.epsilon_chi_convergence
             output["Epsilon Log"] = self.epsilon_log
         if "sigma" in self.runtype:
-            output['Sigma Band Avgs'] = self.band_data
+            output['Sigma Band Contributions'] = self.band_data
             output['Chi Convergence'] = self.ch_convergence
+            output['Off-Shell Band Energies'] = self.band_energies
 
         if "absorption" in self.runtype:
             output['Dielectric Functions'] = self.absorption
@@ -490,6 +536,42 @@ class BgwRun(MSONable):
         #return {self.runtype: d}
         return d
 
+    def _parse_eqp1_dat(self):
+        # parse the band energy eqp1.dat file from sigma
+        # this currently only handles spin unpolarized case
+    
+        eqp1_fh=open(os.path.join(self.dirname,'eqp1.dat'))
+    
+        band_energies=[]
+        
+        line=eqp1_fh.readline().strip()
+        while line:
+            kpt1,kpt2,kpt3,nbnd=line.split()
+            kpoint=[float(kpt1),float(kpt2),float(kpt3)]
+            dp={}
+            dp["kpoint"]=kpoint
+            dp["number bands"]=int(nbnd)
+            spin=[]
+            band_indx=[]
+            e_mean_field=[]
+            e_qp1=[]
+            for i in range(int(nbnd)):
+                line=eqp1_fh.readline().strip() 
+                spn,bind,emf,eqp1=line.split()
+                spin.append(int(spn))
+                band_indx.append(int(bind))
+                e_mean_field.append(float(emf))
+                e_qp1.append(float(eqp1))
+            dp["spin"]=spin
+            dp["band index"]=band_indx
+            dp["mean field band energy"]=e_mean_field
+            dp["quasi particle band energy"]=e_qp1
+            line=eqp1_fh.readline().strip()
+            band_energies.append(dp)
+
+        self.band_energies=band_energies
+
+    
 
     def _parse_ch_convergence(self):
         i = 1
@@ -509,7 +591,7 @@ class BgwRun(MSONable):
                     d = {}
                     name = "k-point_{}".format(i)
                     d[name] = {}
-                    d[name]['K-POINT'] = ' '.join(l[-5:-2])
+                    d[name]['K-POINT'] = ' '.join(l[-6:-3])
                     d[name]['UNITS'] = 'eV'
 
                     # Reset Data List for new K-point
