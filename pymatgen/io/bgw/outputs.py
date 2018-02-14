@@ -187,6 +187,7 @@ class BgwRun(MSONable):
 
         if "epsilon" in self.runtype:
             print("Processing additional Epsilon data")
+            self._parse_epsilon_OUT()
             # parse epsilon.log in the epsilon directory
             self._parse_epsilon_log()
             # parse ch_converged.dat in the epsilon directory
@@ -198,17 +199,19 @@ class BgwRun(MSONable):
                 line = line.strip()
                 if "Symmetrized values" in line:
                     self._parse_sigma_band_avg(i, self.num_bands, lines) 
+            self._parse_sigma_OUT()
             # parse sigma ch_convergence.dat
             self._parse_ch_convergence() 
             # parese sigma band energies in eqp1.dat
             self._parse_eqp1_dat()
 
         if "kernel" in self.runtype:
-            pass
+            self._parse_kernel_OUT()
 
         self.absorption = {}
         if "absorption" in self.runtype: 
             self.dirname = os.path.dirname(os.path.abspath(self.output_filename))
+            self._parse_absorption_OUT()
             if 'absorption_eh.dat' in os.listdir(self.dirname):
                 self._parse_absorption(os.path.join(self.dirname,
                     'absorption_eh.dat'))
@@ -253,6 +256,88 @@ class BgwRun(MSONable):
             self.cond_min_nrg, self.cond_units = (l[-2], l[-1])
         if 'Fermi' in stream:
             self.fermi_nrg, self.fermi_units = (l[-2], l[-1])
+
+    def _parse_epsilon_OUT(self):
+        self.epsilon_OUT={}
+        epsout_fh=open(os.path.join(self.dirname,'OUT.eps'))
+        
+        line=epsout_fh.readline() 
+        while line:
+            if "Running MPI version" in line:
+                line=epsout_fh.readline() 
+                match=re.search(r"Running with (\d+) MPI",line)
+                if match:
+                    self.epsilon_OUT["number mpi tasks"]=int(match.group(1))
+                break
+            line=epsout_fh.readline() 
+    
+        while line:
+            if "Reading header of WFN" in line:
+                self.epsilon_OUT["WFN header"]={}
+                break
+            line=epsout_fh.readline() 
+    
+        line=epsout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            key,value=line.strip().split('=')
+            key=key.replace('.','')
+            if 'eV' in value:
+                value,extra=value.split() # remove eV
+            self.epsilon_OUT["WFN header"][key]=value
+            line=epsout_fh.readline() 
+        
+        while line:
+            if "Reading header of WFNq" in line:
+                self.epsilon_OUT["WFNq header"]={}
+                break
+            line=epsout_fh.readline() 
+    
+        line=epsout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            key,value=line.strip().split('=')
+            key=key.replace('.','')
+            if 'eV' in value:
+                value,extra=value.split() # remove eV
+            self.epsilon_OUT["WFNq header"][key]=value
+            line=epsout_fh.readline() 
+        
+        while line:
+            if "Calculation parameters" in line:
+                self.epsilon_OUT["Calculation parameters"]={}
+                break
+            line=epsout_fh.readline() 
+    
+        line=epsout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            line=re.sub("^\s*-",'',line.strip())
+            
+            key,value=line.strip().split(':')
+            key=key.replace('.','')
+            self.epsilon_OUT["Calculation parameters"][key]=value
+            line=epsout_fh.readline() 
+    
+        line=epsout_fh.readline() 
+        while line:
+            if 'Number of electrons per unit cell' in line:
+                key,value=line.strip().split('=')
+                self.epsilon_OUT["Calculation parameters"][key]=value
+            if 'Plasma Frequency' in line:
+                match=re.search(r"(\d*\.\d+)\s+(\S+)", line)
+                if match:
+                    value=float(match.group(1))
+                    key='Plasma Frequency ({})'.format(match.group(2))
+                    self.epsilon_OUT["Calculation parameters"][key]=value
+                break
+            line=epsout_fh.readline() 
+    
+        epsout_fh.close()
+
 
     def _parse_epsilon_log(self):
 
@@ -324,6 +409,11 @@ class BgwRun(MSONable):
                 G_1.append(g1)
                 G_2.append(g2)
                 epsinv.append(epsinv_len)
+
+                if iqpt == 0:
+                    if g1 == [0,0,0] and g2 == [0,0,0]:
+                        macro_eps=1.0/epsinv_len
+
                 
                 num_g=num_g+1
                 line=eps_fh.readline() 
@@ -343,6 +433,8 @@ class BgwRun(MSONable):
                 qpt_max=qpt
                 g1_max=G_1[num_g-2]
                 g2_max=G_2[num_g-2]
+
+            iqpt+=1
     
 
         self.epsilon_log["minimum inverse(epsilon)_Gmax,Gmax"]={}
@@ -356,6 +448,7 @@ class BgwRun(MSONable):
         self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["Gmax"]=g1_max
         self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["Gmax-1"]=g2_max
         self.epsilon_log["maximum inverse(epsilon)_Gmax,(Gmax-1)"]["q-point"]=qpt_max
+        self.epsilon_log["macroscopic epsilon from inverse(epsilon)_0,0;q->0"]=macro_eps
         eps_fh.close()
 
         
@@ -446,6 +539,101 @@ class BgwRun(MSONable):
             d[l[0]] = {val: l[k] for k,val in enumerate(key)
                     if k != 0}
         self.band_data[kpt_str] = d
+
+    def _parse_kernel_OUT(self):
+
+        kerout_fh=open(os.path.join(self.dirname, 'OUT.ker') )
+        self.kernel_OUT={}
+        
+        line=kerout_fh.readline() 
+        while line:
+            if "Running MPI version" in line:
+                line=kerout_fh.readline() 
+                match=re.search(r"Running with (\d+) MPI",line)
+                if match:
+                    self.kernel_OUT["number mpi tasks"]=int(match.group(1))
+                break
+            line=kerout_fh.readline() 
+    
+        line=kerout_fh.readline() 
+        while line:
+            if "- Debug flags: " in line:
+                line=kerout_fh.readline() 
+                break
+            line=kerout_fh.readline() 
+    
+        calc_strings=''
+        line=kerout_fh.readline() 
+        while line:
+            if 'NOTE:' in line.strip():
+                break
+            if line.strip():
+                calc_strings=calc_strings+line
+            self.kernel_OUT["calulation methods"]=calc_strings
+            line=kerout_fh.readline() 
+    
+        line=kerout_fh.readline() 
+        line=kerout_fh.readline() 
+        self.kernel_OUT["band edge info"]={}
+        while line:
+            if not line.strip():
+                break
+            key,value=line.strip().split('=')
+            key=key.replace('.','')
+            if 'eV' in value:
+                value,extra=value.split() # remove eV
+            self.kernel_OUT["band edge info"][key]=value
+            line=kerout_fh.readline() 
+    
+        par_strings=''
+        calc_line=kerout_fh.readline() 
+        line=kerout_fh.readline() 
+        while line:
+            if 'Memory available:' in line.strip():
+                break
+            if line.strip():
+                par_strings=par_strings+line
+            self.kernel_OUT["parallel methods"]=par_strings
+            line=kerout_fh.readline() 
+    
+        line=kerout_fh.readline() 
+        while line:
+            if "Crystal wavefunctions" in line:
+                self.kernel_OUT["WFN_co header"]={}
+                break
+            line=kerout_fh.readline() 
+    
+        while line:
+            if not line.strip():
+                break
+            line=re.sub("^\s*-",'',line.strip())
+            key,value=line.strip().split(':')
+            key=key.replace('.','')
+            self.kernel_OUT["WFN_co header"][key]=value
+            line=kerout_fh.readline() 
+    
+        while line:
+            if "Calculation parameters" in line:
+                self.kernel_OUT["Calculation parameters"]={}
+                break
+            line=kerout_fh.readline() 
+    
+        while line:
+            if not line.strip():
+                break
+            line=re.sub("^\s*-",'',line.strip())
+            if ':' in line:
+                key,value=line.strip().split(':')
+                key=key.replace('.','')
+                self.kernel_OUT["Calculation parameters"][key]=value
+            else:
+                self.kernel_OUT["calulation methods"]=self.kernel_OUT["calulation methods"]+line
+            line=kerout_fh.readline() 
+    
+            self.kernel_OUT["calulation methods"]=self.kernel_OUT["calulation methods"]+calc_line
+        
+
+        kerout_fh.close()
             
     def _parse_timings(self, i, stream):
         for line in stream[i+2:]:
@@ -500,6 +688,129 @@ class BgwRun(MSONable):
                     d[ftype][k].append([l[0], l[i]])
         self.absorption.update(d)
 
+    def _parse_absorption_OUT(self):
+
+        absout_fh=open(os.path.join(self.dirname, 'OUT.abs') )
+        self.absorption_OUT={}
+        
+        line=absout_fh.readline() 
+        while line:
+            if "Running MPI version" in line:
+                line=absout_fh.readline() 
+                match=re.search(r"Running with (\d+) MPI",line)
+                if match:
+                    self.absorption_OUT["number mpi tasks"]=int(match.group(1))
+                break
+            line=absout_fh.readline() 
+    
+        line=absout_fh.readline() 
+        while line:
+            if "- Debug flags: " in line:
+                line=absout_fh.readline() 
+                break
+            line=absout_fh.readline() 
+    
+        calc_strings=''
+        line=absout_fh.readline() 
+        while line:
+            if 'Memory available:' in line.strip():
+                break
+            if line.strip():
+                calc_strings=calc_strings+line
+            self.absorption_OUT["calulation methods"]=calc_strings
+            line=absout_fh.readline() 
+    
+        line=absout_fh.readline() 
+        line=absout_fh.readline() 
+        line=absout_fh.readline() 
+    
+        par_strings=''
+        calc_line=absout_fh.readline() 
+        line=absout_fh.readline() 
+        while line:
+            if 'Started reading wavefunctions' in line.strip():
+                break
+            if line.strip():
+                par_strings=par_strings+line
+            self.absorption_OUT["parallel methods"]=par_strings
+            line=absout_fh.readline() 
+    
+        line=absout_fh.readline() 
+        while line:
+            if 'Conduction wavefunctions read from file WFN_fi' in line.strip():
+                self.absorption_OUT["WFN_fi feedback"]={}
+                break
+            line=absout_fh.readline() 
+    
+        
+        def get_params_dict(fh):
+            dict={}
+            line=fh.readline() 
+            while line:
+                if not line.strip():
+                    break
+                line=re.sub("^\s*-",'',line.strip())
+                
+                key,value=line.strip().split(':')
+                key=key.replace('.','')
+                dict[key]=value
+                line=fh.readline()
+            return dict
+    
+        new_dict=get_params_dict(absout_fh)
+        self.absorption_OUT["WFN_fi feedback"]=new_dict
+    
+        line=absout_fh.readline() 
+        while line:
+            if 'Lowest-energy independent-particle transitions' in line.strip():
+                break
+            line=absout_fh.readline() 
+        line=absout_fh.readline() 
+    
+        def get_lines(fh):
+            line=absout_fh.readline() 
+            mylines=''
+            while line:
+                if not line.strip():
+                    break
+                if line.strip():
+                    mylines=mylines+line
+                line=absout_fh.readline() 
+            return mylines
+        
+        self.absorption_OUT["Lowest-energy independent-particle transitions"]=get_lines(absout_fh)
+        
+        line=absout_fh.readline() 
+        while line:
+            if 'More job parameters' in line.strip():
+                break
+            line=absout_fh.readline() 
+    
+        self.absorption_OUT["job parameters"]=get_params_dict(absout_fh)
+    
+        def skip_reading_report(fh):
+            line=fh.readline()
+            while line:
+                if 'Elapsed time' in line:
+                    break
+                line=absout_fh.readline() 
+                
+            
+        line=absout_fh.readline() 
+        additional_lines=''
+        while line:
+            if 'CPU (s)' in line:
+                break
+            elif ' Started ' in line:
+                skip_reading_report(absout_fh)
+            if line.strip():
+                additional_lines=additional_lines+line
+            line=absout_fh.readline() 
+     
+        self.absorption_OUT["additional report"]=additional_lines
+    
+        absout_fh.close()
+
 
     def key_check(self, key):
         return key if not '.' in key else key.replace('.', ',')
@@ -525,13 +836,18 @@ class BgwRun(MSONable):
         if "epsilon" in self.runtype:
             output["Chi Convergence"] = self.epsilon_chi_convergence
             output["Epsilon Log"] = self.epsilon_log
+            output["Epsilon Out"] = self.epsilon_OUT
         if "sigma" in self.runtype:
             output['Sigma Band Contributions'] = self.band_data
             output['Chi Convergence'] = self.ch_convergence
             output['Off-Shell Band Energies'] = self.band_energies
+            output['Sigma Out']=self.sigma_OUT
+        if "kernel" in self.runtype:
+            output['Kernel Out']=self.kernel_OUT
 
         if "absorption" in self.runtype:
             output['Dielectric Functions'] = self.absorption
+            output['Absorption Out']=self.absorption_OUT
                
         #return {self.runtype: d}
         return d
@@ -571,6 +887,108 @@ class BgwRun(MSONable):
 
         self.band_energies=band_energies
 
+    def _parse_sigma_OUT(self):
+        sigout_fh=open(os.path.join(self.dirname, 'OUT.sig') )
+        self.sigma_OUT={}
+        
+        line=sigout_fh.readline() 
+        while line:
+            if "Running MPI version" in line:
+                line=sigout_fh.readline() 
+                match=re.search(r"Running with (\d+) MPI",line)
+                if match:
+                    self.sigma_OUT["number mpi tasks"]=int(match.group(1))
+                break
+            line=sigout_fh.readline() 
+    
+        line=sigout_fh.readline() 
+        while line:
+            if "WARNING: keywords" in line:
+                line=sigout_fh.readline() 
+                break
+            line=sigout_fh.readline() 
+    
+        calc_strings=''
+        line=sigout_fh.readline() 
+        while line:
+            if 'Memory available' in line.strip():
+                break
+            if line.strip():
+                calc_strings=calc_strings+line
+            self.sigma_OUT["calulation methods"]=calc_strings
+            line=sigout_fh.readline() 
+    
+        while line:
+            if "Read from eps0mat" in line:
+                self.sigma_OUT["eps0mat header"]={}
+                break
+            line=sigout_fh.readline() 
+    
+        line=sigout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            line=re.sub("^\s*-",'',line.strip())
+            
+            key,value=line.strip().split(':')
+            key=key.replace('.','')
+            self.sigma_OUT["eps0mat header"][key]=value
+            line=sigout_fh.readline() 
+    
+        while line:
+            if "Read from epsmat" in line:
+                self.sigma_OUT["epsmat header"]={}
+                break
+            line=sigout_fh.readline() 
+    
+        line=sigout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            line=re.sub("^\s*-",'',line.strip())
+            
+            key,value=line.strip().split(':')
+            key=key.replace('.','')
+            self.sigma_OUT["epsmat header"][key]=value
+            line=sigout_fh.readline() 
+        
+        
+        while line:
+            if "Reading header of WFN_inner" in line:
+                self.sigma_OUT["WFN_inner header"]={}
+                break
+            line=sigout_fh.readline() 
+    
+        line=sigout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            key,value=line.strip().split('=')
+            key=key.replace('.','')
+            if 'eV' in value:
+                value,extra=value.split() # remove eV
+            self.sigma_OUT["WFN_inner header"][key]=value
+            line=sigout_fh.readline() 
+        
+        while line:
+            if "Calculation parameters" in line:
+                self.sigma_OUT["Calculation parameters"]={}
+                break
+            line=sigout_fh.readline() 
+    
+        line=sigout_fh.readline() 
+        while line:
+            if not line.strip():
+                break
+            line=re.sub("^\s*-",'',line.strip())
+            
+            key,value=line.strip().split(':')
+            key=key.replace('.','')
+            self.sigma_OUT["Calculation parameters"][key]=value
+            line=sigout_fh.readline() 
+    
+    
+        sigout_fh.close()
     
 
     def _parse_ch_convergence(self):
