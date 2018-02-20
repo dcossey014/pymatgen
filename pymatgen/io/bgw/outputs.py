@@ -16,6 +16,8 @@ from six import string_types
 
 import numpy as np
 from sklearn.metrics import mean_squared_error
+import pandas as pd
+import json
 
 from monty.io import zopen, reverse_readfile
 from monty.re import regrep
@@ -218,6 +220,7 @@ class BgwRun(MSONable):
             if 'absorption_noeh.dat' in os.listdir(self.dirname):
                 self._parse_absorption(os.path.join(self.dirname,
                     'absorption_noeh.dat'))
+            self._parse_abs_datatables()
 
     def _parse_memory(self, stream):
         l = stream.strip()
@@ -562,14 +565,14 @@ class BgwRun(MSONable):
                 break
             line=kerout_fh.readline() 
     
-        calc_strings=''
+        calc_strings='\n'
         line=kerout_fh.readline() 
         while line:
             if 'NOTE:' in line.strip():
                 break
             if line.strip():
                 calc_strings=calc_strings+line
-            self.kernel_OUT["calulation methods"]=calc_strings
+            self.kernel_OUT["calculation methods"]=calc_strings
             line=kerout_fh.readline() 
     
         line=kerout_fh.readline() 
@@ -585,7 +588,7 @@ class BgwRun(MSONable):
             self.kernel_OUT["band edge info"][key]=value
             line=kerout_fh.readline() 
     
-        par_strings=''
+        par_strings='\n'
         calc_line=kerout_fh.readline() 
         line=kerout_fh.readline() 
         while line:
@@ -627,10 +630,10 @@ class BgwRun(MSONable):
                 key=key.replace('.','')
                 self.kernel_OUT["Calculation parameters"][key]=value
             else:
-                self.kernel_OUT["calulation methods"]=self.kernel_OUT["calulation methods"]+line
+                self.kernel_OUT["calculation methods"]=self.kernel_OUT["calculation methods"]+line
             line=kerout_fh.readline() 
     
-            self.kernel_OUT["calulation methods"]=self.kernel_OUT["calulation methods"]+calc_line
+            self.kernel_OUT["calculation methods"]=self.kernel_OUT["calculation methods"]+calc_line
         
 
         kerout_fh.close()
@@ -710,21 +713,21 @@ class BgwRun(MSONable):
                 break
             line=absout_fh.readline() 
     
-        calc_strings=''
+        calc_strings='\n'
         line=absout_fh.readline() 
         while line:
             if 'Memory available:' in line.strip():
                 break
             if line.strip():
                 calc_strings=calc_strings+line
-            self.absorption_OUT["calulation methods"]=calc_strings
+            self.absorption_OUT["calculation methods"]=calc_strings
             line=absout_fh.readline() 
     
         line=absout_fh.readline() 
         line=absout_fh.readline() 
         line=absout_fh.readline() 
     
-        par_strings=''
+        par_strings='\n'
         calc_line=absout_fh.readline() 
         line=absout_fh.readline() 
         while line:
@@ -769,6 +772,7 @@ class BgwRun(MSONable):
     
         def get_lines(fh):
             line=absout_fh.readline() 
+            line='\n'+line
             mylines=''
             while line:
                 if not line.strip():
@@ -797,7 +801,7 @@ class BgwRun(MSONable):
                 
             
         line=absout_fh.readline() 
-        additional_lines=''
+        additional_lines='\n'
         while line:
             if 'CPU (s)' in line:
                 break
@@ -810,6 +814,156 @@ class BgwRun(MSONable):
         self.absorption_OUT["additional report"]=additional_lines
     
         absout_fh.close()
+
+    def _parse_abs_datatables(self):
+    
+        bs_file=os.path.join(self.dirname, 'bandstructure.dat')
+        dt_fh=open(bs_file)
+        line=dt_fh.readline()
+        line=dt_fh.readline()
+        line=dt_fh.readline()
+        spin=[]
+        band=[]
+        kx=[]
+        ky=[]
+        kz=[]
+        e_mf=[]
+        e_qp=[]
+        delta_e=[]
+        while line:
+            cols=line.strip().split()
+            spin.append(int(cols[0]))
+            band.append(int(cols[1]))
+            kx.append(float(cols[2]))
+            ky.append(float(cols[3]))
+            kz.append(float(cols[4]))
+            e_mf.append(float(cols[5]))
+            e_qp.append(float(cols[6]))
+            delta_e.append(float(cols[7]))
+            line=dt_fh.readline()
+    
+        dt_fh.close()
+    
+        self.abs_bandstruc_json={
+            "spin": spin,
+            "band": band,
+            "kx": kx,
+            "ky": ky,
+            "kz": kz,
+            "e_mf": e_mf,
+            "e_qp": e_qp,
+            "delta_e": delta_e }
+
+        # read eigenvalues.dat file and put into a dictionary
+
+        ev_file=os.path.join(self.dirname, 'eigenvalues.dat')
+        ev_fh=open(ev_file)
+
+        line=ev_fh.readline()
+        line=line.strip().replace('#','')
+        str,number=line.split('=')
+        neig=int(number)
+        line=ev_fh.readline()
+        line=line.strip().replace('#','')
+        str,number=line.split('=')
+        vol=float(number)
+        line=ev_fh.readline()
+        line=line.strip().replace('#','')
+        str,number=line.split('=')
+        nspin=int(number)
+        
+        eig=[]
+        dp_sqr=[]
+        re_dip=[]
+        im_dip=[]
+        line=ev_fh.readline()
+        line=ev_fh.readline()
+        while line:
+            cols=line.split()
+            eig.append(float(cols[0]))
+            dp_sqr.append(float(cols[1]))
+            re_dip.append(float(cols[2]))
+            im_dip.append(float(cols[3]))
+            line=ev_fh.readline()
+    
+        ev_fh.close()
+    
+        self.abs_ev_json={
+            "neig": neig,
+            "vol": vol,
+            "nspin": nspin,
+            "eigenvalues": eig,
+            "abs(dipole)^2": dp_sqr,
+            "Re(dipole)": re_dip,
+            "Im(dipole)": im_dip
+            }
+    
+        evnoeh_file=os.path.join(self.dirname, 'eigenvalues_noeh.dat')
+        evn_fh=open(evnoeh_file)
+
+        line=evn_fh.readline()
+        line=line.strip().replace('#','')
+        str,number=line.split('=')
+        neig=int(number)
+        line=evn_fh.readline()
+        line=line.strip().replace('#','')
+        str,number=line.split('=')
+        vol=float(number)
+        line=evn_fh.readline()
+        line=line.strip().replace('#','')
+        strs,numbers=line.split('=')
+        nums=numbers.split()
+        nspin=int(nums[0])
+        nkpt=int(nums[1])
+        ncb=int(nums[2])
+        nvb=int(nums[3])
+    
+        ik=[]
+        ic=[]
+        iv=[]
+        ispin=[]
+        ec=[]
+        ev=[]
+        eig=[]
+        dip_sqr=[]
+        re_dip=[]
+        im_dip=[]
+    
+        line=evn_fh.readline()
+        line=evn_fh.readline()
+        while line:
+            cols=line.split()
+            ik.append(int(cols[0]))
+            ic.append(int(cols[1]))
+            iv.append(int(cols[2]))
+            ispin.append(int(cols[3]))
+            ec.append(float(cols[4]))
+            ev.append(float(cols[5]))
+            eig.append(float(cols[6]))
+            dp_sqr.append(float(cols[7]))
+            re_dip.append(float(cols[8]))
+            im_dip.append(float(cols[9]))
+            line=evn_fh.readline()
+    
+        evn_fh.close()
+    
+        self.evnoeh_json={
+            "neig": neig,
+            "vol": vol,
+            "nspin": nspin,
+            "nkpt": nkpt,
+            "ncb": ncb,
+            "nvb": nvb,
+            "ik": ik,
+            "ic": ic,
+            "iv": iv,
+            "ispin": ispin,
+            "ec": ec,
+            "ev": ev,
+            "eigenvalues": eig,
+            "abs(dipole)^2": dp_sqr,
+            "Re(dipole)": re_dip,
+            "Im(dipole)": im_dip }
 
 
     def key_check(self, key):
@@ -848,6 +1002,11 @@ class BgwRun(MSONable):
         if "absorption" in self.runtype:
             output['Dielectric Functions'] = self.absorption
             output['Absorption Out']=self.absorption_OUT
+            output['absorbtion bandstructure on fine grid']={}
+            output['absorbtion bandstructure on fine grid']=self.abs_bandstruc_json
+            output["absorbtion bandstructure on fine grid"]["units"]={ "kpoints": "Cartesian", "energies": "eV" }
+            output["eigenvalues"]=self.abs_ev_json
+            output["eigenvalues no eh"]=self.evnoeh_json
                
         #return {self.runtype: d}
         return d
@@ -908,14 +1067,14 @@ class BgwRun(MSONable):
                 break
             line=sigout_fh.readline() 
     
-        calc_strings=''
+        calc_strings='\n'
         line=sigout_fh.readline() 
         while line:
             if 'Memory available' in line.strip():
                 break
             if line.strip():
                 calc_strings=calc_strings+line
-            self.sigma_OUT["calulation methods"]=calc_strings
+            self.sigma_OUT["calculation methods"]=calc_strings
             line=sigout_fh.readline() 
     
         while line:
