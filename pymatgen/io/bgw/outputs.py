@@ -16,8 +16,6 @@ from six import string_types
 
 import numpy as np
 from sklearn.metrics import mean_squared_error
-import pandas as pd
-import json
 
 from monty.io import zopen, reverse_readfile
 from monty.re import regrep
