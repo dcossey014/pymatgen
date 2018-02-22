@@ -175,7 +175,7 @@ class BgwDB(FireTaskBase):
         self.db_config = loadfn(os.path.join(os.environ['HOME'], self.get('config_file')))
         self.upload = self.get('insert_to_db', False)
         self.database = self.db_config.get('database', 'BGW_DATA')
-        self.collection = self.db_config.get('collection', 'DEFAULT')
+        self.collection = self.db_config.get('collection', 'calculations')
         self.username = self.db_config.get('username', None)
         self.password = self.db_config.get('password', None)
         self.ssl_ca_file = self.db_config.get('ssl_ca_file', None)
@@ -214,8 +214,27 @@ class BgwDB(FireTaskBase):
             db_auth = connection['admin']
             db_auth.authenticate(self.username, self.password)
 
+
+        # Separate dictionaries into separate collections.
+        bgw_dict = run_data.pop('BGW')
+        esp_dict = run_data.pop('ESPRESSO')
+
+        # Insert Top Level data into 'calculations' Database
         collection = db[self.collection]
-        collection.insert_one(run_data)
+        ob_id = collection.insert_one(run_data)
+
+        # Insert reference id of Top Level Data to BGW and ESPRESSO 
+        # Dictionaries for References and Queries
+        for i in [bgw_dict, esp_dict]:
+            i[u'ref_id'] = ob_id
+
+        # Upload each dictionary to their respective collection
+        collection = db['berkeleygw']
+        collection.insert_one(bgw_dict)
+        
+        collection = db['espresso']
+        collection.insert_one(esp_dict)
+
 
     def get_dict(self):
         esp_run = self.esp_data.as_dict()
@@ -228,6 +247,8 @@ class BgwDB(FireTaskBase):
             'pretty_formula' : self.esp_data.pretty_formula,
             'spacegroup'  : self.esp_data.spacegroup[0],
             'spacegroup_number' : self.esp_data.spacegroup[1],
+            'kpoints_fine' : self.esp_data.kpts_fine,
+            'kpoints_coarse' : self.esp_data.kpts_coarse,
             'BGW': {},
             'started_on'   : data['created_on'],
             'completed_on' : datetime.datetime.utcnow().isoformat(),

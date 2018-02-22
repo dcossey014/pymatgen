@@ -225,6 +225,14 @@ class EspressoRun(MSONable):
     @property
     def pretty_formula(self):
         return self.structure.composition.reduced_formula
+
+    @property
+    def kpts_coarse(self):
+        return self.input['kpoints_coarse']
+
+    @property
+    def kpts_fine(self):
+        return self.input['kpoints_fine']
         
     def as_dict(self):
         d = {'structure': self.structure.as_dict(),
