@@ -226,13 +226,15 @@ class BgwDB(FireTaskBase):
         # Insert reference id of Top Level Data to BGW and ESPRESSO 
         # Dictionaries for References and Queries
         for i in [bgw_dict, esp_dict]:
-            i[u'ref_id'] = ob_id
+            i[u'ref_id'] = ob_id.inserted_id
 
         # Upload each dictionary to their respective collection
         collection = db['berkeleygw']
+        print("bgw_dict: {}".format(bgw_dict))
         collection.insert_one(bgw_dict)
         
         collection = db['espresso']
+        print("esp_dict: {}".format(esp_dict))
         collection.insert_one(esp_dict)
 
 
