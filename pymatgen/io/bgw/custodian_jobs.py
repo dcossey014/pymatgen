@@ -218,6 +218,10 @@ class BgwDB(FireTaskBase):
         # Separate dictionaries into separate collections.
         bgw_dict = run_data.pop('BGW')
         esp_dict = run_data.pop('ESPRESSO')
+        abs_tabs = {'eigenvalues': bgw_dict['absorption']['Output'].pop('eigenvalues')}
+        abs_tabs['eigenvalues no eh'] = bgw_dict['absorption']['Output'].pop('eigenvalues no eh')
+        abs_tabs['absorbtion bandstructure on fine grid'] = bgw_dict['absorption']['Output'].pop(
+                                                'absorbtion bandstructure on fine grid')
 
         # Insert Top Level data into 'calculations' Database
         collection = db[self.collection]
@@ -225,7 +229,7 @@ class BgwDB(FireTaskBase):
 
         # Insert reference id of Top Level Data to BGW and ESPRESSO 
         # Dictionaries for References and Queries
-        for i in [bgw_dict, esp_dict]:
+        for i in [bgw_dict, esp_dict, abs_tabs]:
             i[u'ref_id'] = ob_id.inserted_id
 
         # Upload each dictionary to their respective collection
@@ -236,6 +240,10 @@ class BgwDB(FireTaskBase):
         collection = db['espresso']
         print("esp_dict: {}".format(esp_dict))
         collection.insert_one(esp_dict)
+
+        collection = db['absorption_tables']
+        print("absorption tables: {}".format(abs_tabs))
+        collection.insert_one(abs_tabs)
 
 
     def get_dict(self):
