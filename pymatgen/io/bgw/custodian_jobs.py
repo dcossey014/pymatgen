@@ -234,15 +234,18 @@ class BgwDB(FireTaskBase):
 
         # Upload each dictionary to their respective collection
         collection = db['berkeleygw']
-        print("bgw_dict: {}".format(bgw_dict))
+        print("inserting bgw_dict")
+        #print("bgw_dict: {}".format(bgw_dict))
         collection.insert_one(bgw_dict)
         
         collection = db['espresso']
-        print("esp_dict: {}".format(esp_dict))
+        print("inserting esp_dict")
+        #print("esp_dict: {}".format(esp_dict))
         collection.insert_one(esp_dict)
 
         collection = db['absorption_tables']
-        print("absorption tables: {}".format(abs_tabs))
+        print("inserting absorption tables")
+        #print("absorption tables: {}".format(abs_tabs))
         collection.insert_one(abs_tabs)
 
 
