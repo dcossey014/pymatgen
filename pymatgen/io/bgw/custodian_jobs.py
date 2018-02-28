@@ -254,6 +254,10 @@ class BgwDB(FireTaskBase):
         with open(os.path.join(self.esp_dir, 'FW.json'), 'r') as fin:
             data = json.load(fin)
 
+        kpts = {}
+        for task in esp_run['input']['mf_tasks']:
+            kpts[task] = len(esp_run['band_data']['kpoints'][task])
+
         d = {
             'Structure': esp_run['structure'],
             'ESPRESSO': esp_run,
@@ -262,6 +266,7 @@ class BgwDB(FireTaskBase):
             'spacegroup_number' : self.esp_data.spacegroup[1],
             'kpoints_fine' : self.esp_data.kpts_fine,
             'kpoints_coarse' : self.esp_data.kpts_coarse,
+            'number of kpoints': kpts,
             'BGW': {},
             'started_on'   : data['created_on'],
             'completed_on' : datetime.datetime.utcnow().isoformat(),
@@ -271,6 +276,19 @@ class BgwDB(FireTaskBase):
         for i in self.bgw_dirs:
             bgw_run = getattr(self, i)
             d['BGW'][i] = bgw_run.as_dict()
+
+            d['BGW'][i]['number of kpoints'] = {}
+            if 'epsilon' in i:
+                d['BGW'][i]['number of kpoints']['wfn'] = kpts['wfn']
+                d['BGW'][i]['number of kpoints']['wfnq'] = kpts['wfnq']
+
+            if 'sigma' in i or 'kernel' in i or 'absorption' in i:
+                d['BGW'][i]['number of kpoints']['wfn_co'] = kpts['wfn_co']
+
+            if 'absorption' in i:
+                d['BGW'][i]['number of kpoints']['wfn_fi'] = kpts['wfn_fi']
+                d['BGW'][i]['number of kpoints']['wfnq_fi'] = kpts['wfnq_fi']
+
         return d
 
 

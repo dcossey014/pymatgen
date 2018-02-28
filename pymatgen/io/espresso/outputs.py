@@ -165,9 +165,15 @@ class EspressoRun(MSONable):
                 fw_file = os.path.join(root, 'FW.json')
                 with open(fw_file, 'r') as fin:
                     data = json.load(fin)
-                    self.input = data['spec']['_tasks'][0]
-                    # add contents of yaml file to input
-                    defaults_yaml=os.path.join(os.path.expanduser('~'),self.input["config_file"])
+
+                self.input = data['spec']['_tasks'][0]
+
+                # add contents of yaml file to input
+                # Check for a Defaults File before trying to Parse it
+                defaults_file = self.input.get('config_file', None)
+                if defaults_file:
+                    defaults_yaml=os.path.join(os.path.expanduser('~'),
+                            defaults_file)
                     with open(defaults_yaml,'r') as defaults:
                         try:
                             def_dict=yaml.load(defaults)
