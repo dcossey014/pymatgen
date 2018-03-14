@@ -77,3 +77,42 @@ def gsphere(structure, e_cut):
     #print "fftw_grid=",fftw_grid
     gsout.close()
     return fftw_grid, number_bands
+
+def get_num_val_electrons(struct,pseudo_dir=None,config_file=None):
+
+    def either(c):
+        return '[%s%s]'%(c.lower(),c.upper()) if c.isalpha() else c
+
+    if not pseudo_dir:
+        if config_file:
+            config_dict=loadfn(config_file)
+        elif os.path.exists(os.path.join(os.environ['HOME'],'bgw_interface_defaults.yaml')):
+            config_dict = loadfn(os.path.join(os.environ['HOME'],
+            'bgw_interface_defaults.yaml'))
+            pseudo_dir=config_dict['espresso']['control']['pseudo_dir']
+        else:
+            print "Don't have a pseudpotential directory or config file"
+            exit()
+
+    if not pseudo_dir:
+        print "Can not find pseudo potential files\n"
+
+    comp=struct.composition
+    elem_amt_dict=comp.get_el_amt_dict()
+
+    num_val_e=0
+    for i in struct.symbol_set:
+        amt=elem_amt_dict.get(str(i))
+        pattern="{}/{}_*.UPF".format(pseudo_dir,i)
+        new_pattern=''.join(either(char) for char in pattern)
+        pps=glob.glob(new_pattern)
+        ppfile=pps[-1]
+        ppfh=open(ppfile)
+        for line in ppfh:
+            if "z_valence" in line:
+                l=line.strip().split()
+                z_val=float(l[-1][:-1])
+                break
+        num_val_e=num_val_e+z_val*amt
+
+    return int(num_val_e)

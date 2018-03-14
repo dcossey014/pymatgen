@@ -54,7 +54,7 @@ class BGWJob(Job):
 
     def run(self):
         cmd=list(self.bgw_cmd)
-        logger.debug("in BGWJob.run, cmd = ", cmd)
+        logger.debug("in BGWJob.run, cmd = {}".format(cmd))
         with open(self.output_file, 'w') as f:
             p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
         return p
@@ -69,7 +69,7 @@ class BGWJob(Job):
             cmd = self.pp_cmd.split() if isinstance(self.pp_cmd,
                         (str, unicode)) else list(self.pp_cmd)
             #print "running PostProcessing with: ", cmd
-            logger.debug("running PostProcessing with: ", cmd)
+            logger.debug("running PostProcessing with: {}".format(cmd))
             with open("pp.out", 'w') as f:                
                 p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
             p.wait()
