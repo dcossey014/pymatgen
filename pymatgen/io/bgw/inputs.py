@@ -19,7 +19,6 @@ from monty.json import MSONable
 from monty.serialization import loadfn
 from collections import defaultdict, OrderedDict
 from fireworks import FireTaskBase, explicit_serialize, FWAction
-from pymatgen import Structure
 
 
 @explicit_serialize
@@ -28,11 +27,9 @@ class BgwInputTask(FireTaskBase):
     Fireworks Task for writing BerkeleyGW Input Files.
 
     Required Parameters:
-        structure           :   An input structure in pymatgen's Structure format
-        pseudo_dir  (str)   :   Directory where PseudoPotential Files are stored
         input_set_params (dict):Dictionary of input set parameters for the BerkeleyGW
                                 job to be run
-        out_file    (str)   :   Filename to write Input file to
+        in_file    (str)   :   Filename to write Input file to
 
     Optional Parameters:
         kpoints (array)     :   List of Kpoints used in Kgrid.x to create WFN.
@@ -44,56 +41,35 @@ class BgwInputTask(FireTaskBase):
 
     '''
     
-    required_params = ['structure', 'pseudo_dir', 'input_set_params', 'out_file']
-    optional_params = ['kpoints', 'qshift', 'mat_type', 'cmplx_real', 'qemf_dir', 'config_file', 'reduce_structure']
+    required_params = ['input_set_params', 'in_file']
+    optional_params = ['kpoints', 'qshift', 'mat_type', 'cmplx_real', 'qemf_dir', 'config_file', 
+        'reduce_structure', 'input_set_params', 'in_file']
 
     def __init__(self, params): 
-        self.structure = Structure.from_dict(params.get('structure').as_dict()) if params.get('structure', '') else ''
-        self.pseudo_dir = params.get('pseudo_dir')
+        print "\n\nin BgwInputTask __init__"
+
         self.kpoints = params.get('kpoints', None)
         self.qshift = params.get('qshift', None)
         self.isp = params.get('input_set_params')
         self.run_type = params.get('run_type', None)
-        self.mat_type = params.get('mat_type', 'metal')
-        self.filename = params.get('out_file')
+        self.mat_type = params.get('mat_type', 'semiconductor')
+        self.filename = params.get('in_file')
         self.cmplx_real = params.get('cmplx_real')
         self.qemf_dir = params.get('qemf_dir')
         self.kps = params.get('kps', None)
         #gk: why is occupied_bands set here?
-        self.occupied_bands = params.get('occupied_bands', 0)
+        #self.occupied_bands = params.get('occupied_bands', 0)
         self.config_file = params.get('config_file')
         self.reduce_structure = params.get('reduce_structure', False)
 
-        #print "gk: in BgwInputTask.__init__ from params, self.occupied_bands = ",self.occupied_bands
-
-        #Build Pseudo Dictionary and List of PPs files if given Structure
-        if self.reduce_structure:
-            self.structure = self.convert2primitive(self.structure)
-
-        if self.structure:
-            self.pseudo = {}
-            self.pseudo_files = []
-            for i in self.structure.symbol_set: 
-                pattern = "{}*.upf".format(i)
-                pps = []
-                for j in os.listdir(self.pseudo_dir):
-                    m = re.match(re.compile(fnmatch.translate(pattern), 
-                                    re.IGNORECASE), j)
-                    if m:
-                        pps.append(os.path.join(self.pseudo_dir,m.group(0)))
-                self.pseudo_files.append(pps[-1])
-                self.pseudo[i.encode('ascii', 'ignore')] = pps[-1].split('/')[-1]
-
-        params = {'structure': self.structure, 'pseudo_dir': self.pseudo_dir,
-                'kpoints': self.kpoints, 'qshift': self.qshift, 
+        params = {
+                'qshift': self.qshift, 
                 'input_set_params': self.isp, 'run_type': self.run_type,
-                'mat_type':self.mat_type, 'out_file': self.filename,
-                'occupied_bands': self.occupied_bands, 
+                'mat_type':self.mat_type, 'in_file': self.filename,
                 'kps': self.kps, 'cmplx_real': self.cmplx_real,'qemf_dir': self.qemf_dir}
-        #super(BgwInputTask, self).__init__()
-        #self.check_write_params()
+
         self.update(params)
-        
+
     def convert2primitive(self, s):
         from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
         finder = SpacegroupAnalyzer(s)
@@ -113,32 +89,11 @@ class BgwInputTask(FireTaskBase):
                 qshift = [float(i) for i in lines[2].strip().split()]
                 self.kps = Kgrid.from_file(wfn_out)
 
-            qtype = 2 if type == 'metal' else 1
-
-            '''
-            for i,j in enumerate(self.kps):
-                k = j.split()
-                #self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0\n".format(float(k[0]),
-                self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:5.1f}\n".format(float(k[0]),
-                                    float(k[1]), float(k[2]), float(k[3]) )
-            
-            if self.run_type == 'epsilon':
-                self.kps[0] = "{0:.6f}  {1:.6f}  {2:.6f}  1.0  {3}\n".format(
-                                qshift[0], qshift[1], qshift[2],
-                                qtype)
-
-                for i,j in enumerate(self.kps[1:], start=1):
-                    k = j.split()
-                    self.kps[i] = "{0:.6f}  {1:.6f}  {2:.6f}  {3:>3.1f}  0\n".format(
-                                    float(k[0]), float(k[1]), float(k[2]), float(k[3]))
-            '''
-
-            #for kp in self.kps:
-            #    out.append("  {}".format(kp.strip()))
+            qtype = 2 if self.mat_type == 'metal' else 1
 
             if 'epsilon' in self.run_type.lower():
                 self.kps = [[j[0], j[1], j[2], 1.0, 0] for j in self.kps]
-                self.kps[0] = [qshift[0], qshift[1], qshift[2], 1.0, 1]
+                self.kps[0] = [qshift[0], qshift[1], qshift[2], 1.0, qtype]
 
                 out.extend(["  {:.6f}  {:.6f}  {:.6f} {:>4.1f}  {:2d}".format(
                                 j[0], j[1], j[2], j[3], j[4]
@@ -152,24 +107,24 @@ class BgwInputTask(FireTaskBase):
 
             out.append('end')
 
-        def write_band_occ():
-            print "gk in BgwInput.__str__.write_band_occ(), self.occupied_bands=",self.occupied_bands
-            out.append("band_occupation {}*1 {}*0".format(
-                    int(self.occupied_bands), 
-                    int(self.isp['number_bands']) - int(self.occupied_bands)))
+        #def write_band_occ():
+        #    print "gk in BgwInput.__str__.write_band_occ(), self.occupied_bands=",self.occupied_bands
+        #    out.append("band_occupation {}*1 {}*0".format(
+        #            int(self.occupied_bands), 
+        #            int(self.isp['number_bands']) - int(self.occupied_bands)))
 
         for k1 in self.isp.keys():
             out.append("{}  {}".format(k1, self.isp[k1]))
         print "gk: first out = ", out
 
         if 'epsilon' in self.run_type:
-            if self.occupied_bands != None:
-                write_band_occ()
+            #if self.occupied_bands != None:
+            #    write_band_occ()
             out.append('begin qpoints')
             write_kpoints()
         elif 'sigma' in self.run_type:
-            if self.occupied_bands != None:
-                write_band_occ()
+            #if self.occupied_bands != None:
+            #    write_band_occ()
             out.append('begin kpoints')
             write_kpoints()
 
@@ -185,11 +140,15 @@ class BgwInputTask(FireTaskBase):
         if not self.run_type:
             self.run_type = filename
         #gk: probably remove below, because now we are checking at FW creation
+        print "gk: in BgwInputTask.write_file, filename=",filename
+        print "gk: in BgwInputTask.write_file before check_params"
         self.check_params()
+        print "gk: in BgwInputTask.write_file after check_params"
         with open(filename, 'w') as f:
             f.write(self.__str__()+'\n')
 
     def check_params(self):
+        print "gk: in BgwInputTask.check_params"
         #gk: probably none of these are required in BGW v 1.2
         eps_params = ['epsilon_cutoff', 'number_bands']
         #gk: probably none of these are required
@@ -207,19 +166,12 @@ class BgwInputTask(FireTaskBase):
         if 'epsilon' in self.run_type:
             params = list(eps_params)
         elif 'sigma' in self.run_type:
-            #gk: sigma picks up number_bands from epsilon? 
             params = list(sig_params)
             self.isp['band_index_min'] = self.isp.get('band_index_min',1)
-            #self.isp['band_index_max'] = self.isp.get('band_index_max', 
-            #                            self.isp.get('number_bands', 0))
             bim=self.isp.get('band_index_max',self.isp.get('number_bands', 0))
             bm=self.isp.get('number_bands')
             bim=bm if bim>bm else bim
             self.isp['band_index_max']=bim
-            print "gk: in BgwInput.check params"
-            print "gk:     band_index_min=", self.isp.get('band_index_min')
-            print "gk:     band_index_max=", self.isp.get('band_index_max')
-            print "gk:     number_bands=", self.isp.get('number_bands')
         elif 'sig2wan' in self.run_type:
             params = list(sig2wan_params)
         elif 'abs' in self.run_type:
@@ -237,9 +189,6 @@ class BgwInputTask(FireTaskBase):
                         ' was not found for given run_type.  ' +
                         'Using run_type: "{}"'.format(self.run_type))
                 return
-
-        #with open(filename, 'w') as f:
-        #    f.write(self.__str__()+'\n')
 
     def dep_setup(self, fout):
 
@@ -286,21 +235,14 @@ class BgwInputTask(FireTaskBase):
         if 'sigma' in fout:
             print "Setting up Sigma dependencies and checking input values."
             wfn_co = self.qe_dirs['wfn_co']
-            #wfn = self.qe_dirs['wfn']
             force_link(os.path.join(wfn_co, 'vxc.dat'),
                     './vxc.dat')
             rho_file='rho.'+self.cmplx_real
             force_link(os.path.join(wfn_co, rho_file),
                     './RHO')
-            #gk: number_bands from here?
-            #force_link(os.path.join(wfn_co, wfn_co_file),
-            #        './WFN_outer')
-            #gk: or number_bands from here?
-            #gk: WFN_inner could be wfn_co or wfn....????
             force_link(os.path.join(wfn_co, wfn_file), 
                     './WFN_inner')
             extra_links('eps')
-            #gk: number_bands checked and adjusted here
             self.check_degeneracy(['./WFN_inner'])
 
         if 'kernel' in fout:
@@ -394,23 +336,10 @@ class BgwInputTask(FireTaskBase):
             else:
                 return after 
 
-        if not self.occupied_bands:
-            self.occupied_bands = allowed_vbands[-1]
-            print "occupied_bands not set.  Setting including all occupied bands, occupied_bands=",self.occupied_bands
-        else:
-            print "User specified occupied_bands =", self.occupied_bands
-            print "Checking for allowed bands closest to occupied_bands."
-            matched_vband = match_bands(self.occupied_bands,allowed_vbands)
-            if matched_vband == self.occupied_bands:
-                print "User specified occupied_bands is degeneracy allowed"
-            else:
-                print "occupied_bands is reset to to degeneracy allowed value,",matched_vband
-                self.occupied_bands=matched_vband
-    
         if 'epsilon' in self.filename:
             user_nbands=int(self.isp.get('number_bands', 0))
             print "For Epsilon user specified number_bands =", user_nbands
-            if user_nbands < self.occupied_bands:
+            if user_nbands < allowed_vbands[-1]:
                 print "Number of bands cannot be less than Number of Valence Bands"
                 user_nbands = allowed_bands[-1]
                 print "Resetting number_bands to, ",user_nbands
@@ -427,7 +356,7 @@ class BgwInputTask(FireTaskBase):
         if 'sigma' in self.filename:
             user_nbands=int(self.isp.get('number_bands', 0))
             print "For Sigma, user specified number_bands =", user_nbands
-            if user_nbands < self.occupied_bands:
+            if user_nbands < allowed_vbands[-1]:
                 print "Number of bands cannot be less than Number of Valence Bands"
                 user_nbands = allowed_bands[-1]
                 print "Resetting number_bands to, ",user_nbands
@@ -443,7 +372,7 @@ class BgwInputTask(FireTaskBase):
 
             max_nbands=int(self.isp.get('band_index_max', 0))
             print "For Sigma, user specified band_index_max =", max_nbands
-            if max_nbands < self.occupied_bands:
+            if max_nbands < allowed_vbands[-1]:
                 print "Number of bands cannot be less than Number of Valence Bands"
                 exit()
             print "Checking for allowed bands closest to band_index_max."
@@ -546,10 +475,6 @@ class BgwInput(BgwInputTask):
     Facade Interface for using the BgwInputTask Fireworks Task.
 
     Parameters:
-        structure (Structure):  Pymatgen Structure to be used in the BerkeleyGW
-                                calculation.
-        pseudo_dir (str):       Directory where PseudoPotential files are
-                                stored.
         filename (str):         Filename to write Input file to.
         kpoints (array):        List of Kpoints used in Kgrid.x to create WFN.
                                 This is required for Epsilon and Sigma calculations.
@@ -560,27 +485,27 @@ class BgwInput(BgwInputTask):
                                 Default: semiconductor
     '''
 
-    def __init__(self, structure, pseudo_dir=None, isp={}, cmplx_real='cmplx',
+    def __init__(self, isp={}, cmplx_real='cmplx',
                 kpoints=None, qshift=None, mat_type='semiconductor',
-                kps=None, occupied_bands = None, filename=None,
+                kps=None, filename=None,
                 qemf_dir=None, reduce_structure=False):
+
+        print "gk: in BgwInput __init__"
 
         self.__dict__['isp'] = isp if isp else {}
         self.__dict__['run_type'] = filename.split('/')[-1].split('.')[0]
-        self.__dict__['params'] = {'structure': structure, 'pseudo_dir': pseudo_dir,
+        self.__dict__['params'] = { 
                 'kpoints': kpoints, 'qshift': qshift, 'kps': kps,
                 'input_set_params': self.isp, 'mat_type': mat_type,
-                'out_file': filename, 'run_type': self.run_type,
-                'occupied_bands': occupied_bands, 'cmplx_real': cmplx_real,
+                'in_file': filename, 'run_type': self.run_type,
+                'cmplx_real': cmplx_real,
                 'qemf_dir': qemf_dir, 'reduce_structure': reduce_structure}
 
+        # this needs to call only with params
+
         super(BgwInput, self).__init__(self.params)
+        print "gk: leaving BgwInput __init__"
 
-
-
-    def write_control_file(self):
-        filename = self.params.get('out_file')
-        self.write_file(filename)
 
     def __setitem__(self, key, val):
         self.proc_key_val(key.strip(), val.strip()) if isinstance(
@@ -591,9 +516,7 @@ class BgwInput(BgwInputTask):
                 val, six.string_types) else self.proc_key_val(key.strip(), val)
 
     def proc_key_val(self, key, val):
-        #print("key: {}\nVal: {}\n\n".format(key, val))
         isp_dict = self.params.get('input_set_params', {})
-        #print("Input Dictionary:  {}\n\n".format(isp_dict))
 
         valid_params = {
             'epsilon': {
@@ -756,9 +679,9 @@ class BgwInput(BgwInputTask):
                 key_found = True
                 key_dict = i
         if not key_found:
-            ignore_list = ['structure', 'pseudo_dir', 'kpoints', 'qshift', 
-                    'isp', 'run_type', 'mat_type', 'filename', 'pseudo', 
-                    'pseudo_files', 'occupied_bands', 'kps', 'kgrid', 'cmplx_real','qemf_dir',
+            ignore_list = ['kpoints', 'qshift', 
+                    'isp', 'run_type', 'mat_type', 'filename',  
+                    'kps', 'kgrid', 'cmplx_real','qemf_dir',
                     'config_file','qe_dirs', 'bgw_dirs', 'reduce_structure']
             if key in ignore_list:
                 self.__dict__['params'].update({key:val})
@@ -777,23 +700,24 @@ class BgwInput(BgwInputTask):
                                 type(val)))
             elif key_dict == 'float':
                 try:
+                    print "gk: calling check_exclusives_and_set with key=",key,"val=",val
                     check_exclusives_and_set(key, float(val))
                 except:
                     raise TypeError("Value for Key: {} ".format(key)+
                             "should be of Type 'float', not {}.".format(
                                 type(val)))
             elif key_dict == 'bool':
-                if type(val) != bool:
+                if not isinstance(val,bool):
                     raise TypeError("Value for Key: {} ".format(key)+
                             "should be of Type 'bool', not {}.".format(
                                 type(val)))
                 check_exclusives_and_set(key, '')
             else:
                 check_exclusives_and_set(key, val)
-            
         
     @staticmethod
     def from_file(file):
+        print "gk: in BgwInput.from_file, file=",file
         with zopen(file, 'rt') as f:
             return BgwInput.from_string(f.read(), file)
 
@@ -809,10 +733,10 @@ class BgwInput(BgwInputTask):
         Returns:
             BgwInput object
         """
+        print "gk: in BgwInput.from_string"
         run_type = filename.split('/')[-1].split('.')[0]
         lines = list(string.splitlines())
         kps = None
-        occupied_bands = None
         isp_params = {}
         for line in lines:
             m = re.match("(\w+)\s*(.*)", line)
@@ -820,10 +744,7 @@ class BgwInput(BgwInputTask):
                 key = m.group(1).strip()
                 val = m.group(2).strip() if m.group(2) else ''
 
-                if 'band_occupation' in key:
-                    n = re.match("(\w+)\*.*", val)
-                    occupied_bands = n.group(1).strip()
-                elif key != 'begin' and key != 'end':
+                if key != 'begin' and key != 'end':
                     isp_params[key] = val
                 elif key == 'begin':
                     kps = lines.index(line) + 1
@@ -833,11 +754,11 @@ class BgwInput(BgwInputTask):
         if kps:
             kps = lines[kps:kp_end]
 
-        params = {'pseudo_dir': '', 'isp': isp_params, 
-                'kps': kps, 'occupied_bands': occupied_bands, 
+        params = {'isp': isp_params, 
+                'kps': kps,  
                 'filename': "{}.inp".format(run_type)}
 
-        return BgwInput('', **params)
+        return BgwInput(**params)
 
     @staticmethod
     def from_directory(d):
@@ -846,16 +767,5 @@ class BgwInput(BgwInputTask):
             print("Found more than one Input file, using {}".format(
                     in_files[0]))
         return BgwInput.from_file(in_files[0])
-
-
-@deprecated(BgwInput, 'Use BgwInput instead')
-class BGWInput():
-    def __init__(self, structure, pseudo_dir, input_set_params={},
-                run_type=None, kpoints=None, qshift=None, type='metal',
-                filename=None):
-
-        BgwInput.__init__(self, structure, pseudo_dir, input_set_params={},
-                run_type=None, kpoints=None, qshift=None, type='metal',
-                filename=out_file)
 
 
