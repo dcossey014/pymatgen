@@ -560,7 +560,7 @@ class BgwInput(BgwInputTask):
                                 Default: semiconductor
     '''
 
-    def __init__(self, structure, pseudo_dir, isp={}, cmplx_real='cmplx',
+    def __init__(self, structure, pseudo_dir=None, isp={}, cmplx_real='cmplx',
                 kpoints=None, qshift=None, mat_type='semiconductor',
                 kps=None, occupied_bands = None, filename=None,
                 qemf_dir=None, reduce_structure=False):
