@@ -405,6 +405,7 @@ class QeMFInput(MSONable):
                     kp_mode = 'automatic'
 
                 kp_shift = [1,1,1]
+
             else:
                 if isinstance(kpoints_coarse, dict):
                     kps = kpoints_coarse[i]

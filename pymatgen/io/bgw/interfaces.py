@@ -424,6 +424,9 @@ class QeMeanFieldTask(FireTaskBase):
             self.__dict__['task_ions'],
             self.__dict__['task_cell'] ) = {}, {}, {}, {}, {}
 
+        if self.bandstructure_kpoint_path:
+            self.mf_tasks.append('wfn_bs')
+
         for i in self.mf_tasks:
             # Take in Defaults from User YAML
 
@@ -447,9 +450,16 @@ class QeMeanFieldTask(FireTaskBase):
             self.task_ions[i].update(self.get('ions', {}).get(i, {}) )
             self.task_cell[i].update(self.get('cell', {}).get(i, {}) )
 
+        print("System: {}".format(self.task_system))
+        print("Control: {}".format(self.task_control))
+        print("electrons: {}".format(self.task_electrons))
+
         # Set VXC_Diag_Nmax and Update Pw2Bgw_Input dictionary with User values
-        self.pw2bgw_input_dict['wfn_co']['vxc_diag_nmax'] = self.task_system['wfn_co']['nbnd']
-        self.pw2bgw_input_dict['wfn_co']['rhog_file'] = rhog_file
+        print("pw2bgw_dict: {}".format(self.pw2bgw_input_dict))
+        wfn_co_pw2bgw = self.get('pw2bgw_input_dict', {}).get('wfn_co', {})
+        print("wfn_co_pw2bgw: {}".format(wfn_co_pw2bgw))
+        wfn_co_pw2bgw['vxc_diag_nmax'] = self.task_system['wfn_co']['nbnd']
+        wfn_co_pw2bgw['rhog_file'] = rhog_file
         self.pw2bgw_input_dict.update(self.get('pw2bgw_input', {}) )
 
         # Get Primitive Sructure if reducing structure
@@ -458,12 +468,6 @@ class QeMeanFieldTask(FireTaskBase):
             finder = SpacegroupAnalyzer(self.structure)
             self.__dict__['structure'] = finder.get_primitive_standard_structure()
 
-        # Get Kgrids for QEMF
-        if self.bandstructure_kpoint_path:
-            self.mf_tasks = ['scf', 'wfn_fi']
-            kpath = Generate_Kpath(self.structure, self.num_kpoints_bandstructure)
-            self.kpoints_fi = kpath.create_path()
-        
         qemf_kgrids = QeMeanFieldGrids(self.structure, kpoints_coarse=self.kpoints_co,
                             kpoints_fine=self.kpoints_fi, qshift=self.qshift,
                             fftw_grid=self.fftw_grid, bgw_rev_off=self.bgw_rev_off, 
@@ -471,6 +475,11 @@ class QeMeanFieldTask(FireTaskBase):
 
         self.__dict__['kgrids'] = qemf_kgrids.generate_kgrids()
 
+        # Get Kgrids for QEMF Bandstructure Plots if given bandstructure_kpoint_path
+        if self.bandstructure_kpoint_path:
+            kpath = Generate_Kpath(self.structure, self.num_kpoints_bandstructure)
+            self.__dict__['kgrids']['wfn_bs'] = kpath.create_path()
+        
 
         # Use QeMFInputs from Espresso Inputs to build inputs.
         self.__dict__['inputs'] = QeMFInput(self.structure, pseudo_dir = self.pseudo_dir,
