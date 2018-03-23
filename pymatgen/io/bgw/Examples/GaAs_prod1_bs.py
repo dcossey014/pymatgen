@@ -35,8 +35,8 @@ pw2bgw_cmd = '/app/espresso/platforms/espresso-6.1.0/bin/pw2bgw.x -npool 4 -ndia
 mpi_cmd_sm = 'mpiexec_mpt -n 144'
 mpi_cmd_lg = 'mpiexec_mpt -n 288'
 pseudo_dir = '/app/ccm/PPs/ONCVPSP/QE'
-kpts_co = [10,10,10]
-kpts_fi= [16,16,16]
+kpts_co = [4,4,4]
+kpts_fi= [6,6,6]
 e_cut_mean_field=200.0 # this has to be higher for more bands i.e. larger screening_cutoff
 screening_cutoff=25.0 # screening energy cutoff 
 band_attenuation=0.6
@@ -182,8 +182,9 @@ qemft.build_inputs(dry_run=True)
 #        qe_electrons=qemft_electrons, qe_pw2bgw=qemft_pw2bgw, mf_tasks=mean_field_tasks)
 
 qemf_fw = Firework([qemft], name="QeMeanField")
+qemf_fw.to_file('GaAs_bs.yaml')
 
-eps_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+eps_inp = binp.BgwInput(cmplx_real=cmplx_real,
             kpoints=kpts_co, qshift=qshift, filename='epsilon.inp',
             qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -194,7 +195,7 @@ eps_fw = bint.BgwFirework(eps_inp, name=namei, complex=cmplx_bool, mpi_cmd=mpi_c
 
 #eps_fw.add_fw_to_launchpad()
 
-sig_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+sig_inp = binp.BgwInput(cmplx_real=cmplx_real,
                 kpoints=kpts_co, qshift=qshift, filename='sigma.inp',
                 qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -216,7 +217,7 @@ sig_fw = bint.BgwFirework(sig_inp, name="Sigma Task", ppx=ppx, complex=cmplx_boo
 
 bgw_wf=bint.BgwWorkflow(qemf_fw, eps_fw, sig_fw, name="Sigma Converge")
 
-krn_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+krn_inp = binp.BgwInput(cmplx_real=cmplx_real,
                 qshift=qshift, filename='kernel.inp',
                 qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -234,7 +235,7 @@ krn_fw.add_handler('BgwMemoryHandler', run_type='kernel')
 krn_fw.add_spec('_queueadapter', {'walltime': '4:00:00', 'nnodes': 8, 'ppnode': 36,
                                   'mppwidth': 36, 'queue': 'standard'})
 
-abs_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+abs_inp = binp.BgwInput(cmplx_real=cmplx_real,
                 qshift=qshift, filename='absorption.inp',
                 qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -265,4 +266,4 @@ bgw_wf2 = bint.BgwWorkflow(qemf_fw, eps_fw, sig_fw, krn_fw, abs_fw, db_fw,
                     name="QE/BGW Optical Task")
 
 bgw_wf2.preserve_worker()
-bgw_wf2.to_file('GaAs_prod1.yaml')
+bgw_wf2.to_file('GaAs_prod1_bs.yaml')

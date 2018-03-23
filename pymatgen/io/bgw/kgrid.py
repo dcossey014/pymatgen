@@ -42,7 +42,10 @@ def generate_kpath(s, npts):
         num_divs = int(round(magnitude[i] / total_length * npts, 0))
         sub_div = length / num_divs
         for j in range(num_divs):
-            gen_kpath.append(gen_kpath[-1] + sub_div)
+            kpoint = (gen_kpath[-1] + sub_div)
+            gen_kpath.append(kpoint.tolist())
+    for j in gen_kpath:
+        j.append(1.0)
     #out = ['{:5d}\n'.format(len(gen_kpath))]
     #out.extend([' {:15.10f} {:15.10f} {:15.10f}   1.0\n'.format(k[0],
     #                            k[1], k[2]) for k in gen_kpath])

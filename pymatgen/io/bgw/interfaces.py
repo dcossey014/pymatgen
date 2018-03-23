@@ -1,5 +1,5 @@
 import os, sys, errno
-import glob
+import glob, logging
 import shutil
 from math import ceil
 from copy import deepcopy as dc
@@ -425,7 +425,7 @@ class QeMeanFieldTask(FireTaskBase):
             self.__dict__['task_cell'] ) = {}, {}, {}, {}, {}
 
         if self.bandstructure_kpoint_path:
-            self.mf_tasks.append('wfn_bs')
+            self.mf_tasks.extend(['scf_bs', 'wfn_bs'])
 
         for i in self.mf_tasks:
             # Take in Defaults from User YAML
@@ -437,7 +437,8 @@ class QeMeanFieldTask(FireTaskBase):
             self.task_electrons[i] = dc(espresso_dict.get('electrons', {}) )
             self.task_ions[i] = dc(espresso_dict.get('ions', {}) )
             self.task_cell[i] = dc(espresso_dict.get('cell', {}) )
-            if 'scf' not in i:
+
+            if 'scf' not in i and not '_bs' in i:
                 pw2bgw_task_dict = self.pw2bgw_input_dict.get(i, {})
                 pw2bgw_task_dict.update({'prefix': prefix, 'wfng_file': wfn_file,
                                             'real_or_complex': cmplx_real_num} 
@@ -450,14 +451,9 @@ class QeMeanFieldTask(FireTaskBase):
             self.task_ions[i].update(self.get('ions', {}).get(i, {}) )
             self.task_cell[i].update(self.get('cell', {}).get(i, {}) )
 
-        print("System: {}".format(self.task_system))
-        print("Control: {}".format(self.task_control))
-        print("electrons: {}".format(self.task_electrons))
 
         # Set VXC_Diag_Nmax and Update Pw2Bgw_Input dictionary with User values
-        print("pw2bgw_dict: {}".format(self.pw2bgw_input_dict))
         wfn_co_pw2bgw = self.get('pw2bgw_input_dict', {}).get('wfn_co', {})
-        print("wfn_co_pw2bgw: {}".format(wfn_co_pw2bgw))
         wfn_co_pw2bgw['vxc_diag_nmax'] = self.task_system['wfn_co']['nbnd']
         wfn_co_pw2bgw['rhog_file'] = rhog_file
         self.pw2bgw_input_dict.update(self.get('pw2bgw_input', {}) )
@@ -477,8 +473,9 @@ class QeMeanFieldTask(FireTaskBase):
 
         # Get Kgrids for QEMF Bandstructure Plots if given bandstructure_kpoint_path
         if self.bandstructure_kpoint_path:
-            kpath = Generate_Kpath(self.structure, self.num_kpoints_bandstructure)
-            self.__dict__['kgrids']['wfn_bs'] = kpath.create_path()
+            kpath = generate_kpath(self.structure, self.num_kpoints_bandstructure)
+            self.__dict__['kgrids']['wfn_bs'] = kpath
+            self.__dict__['kgrids']['scf_bs'] = kpath
         
 
         # Use QeMFInputs from Espresso Inputs to build inputs.
@@ -522,19 +519,40 @@ class QeMeanFieldTask(FireTaskBase):
         scf_chrg = os.path.join('../../../', scf_dir, 'charge-density.dat')
         scf_dat = os.path.join('../../../', scf_dir, 'data-file.xml')
 
+        if self.bandstructure_kpoint_path:
+            scf_bs_dir = "ESPRESSO/scf_bs/{}".format(save_dir)
+            scf_bs_chrg = os.path.join('../../../', scf_bs_dir, 'charge-density.dat')
+            scf_bs_dat = os.path.join('../../../', scf_bs_dir, 'data-file.xml')
+            #logger.debug("scf_bs variables: \n{}\n{}\n{}".format(scf_bs_dir, 
+            #                scf_bs_chrg,scf_bs_dat))
+
         mkdir(scf_dir)
         for i in self.mf_tasks:
-            if 'scf' not in i.lower():
-                link_dir = os.path.join('ESPRESSO', i, save_dir)
-                mkdir(link_dir)
+            link_dir = os.path.join('ESPRESSO', i, save_dir) 
+            mkdir(link_dir)
+
+            if 'scf' not in i.lower() and not "_bs" in i.lower():
                 link_chrg = os.path.join(link_dir, 'charge-density.dat')
                 link_dat = os.path.join(link_dir, 'data-file.xml')
 
                 force_link(scf_dat, link_dat)
                 force_link(scf_chrg, link_chrg)
+
+            elif 'scf' not in i.lower() and "_bs" in i.lower():
+                link_bs_chrg = os.path.join(link_dir, 'charge-density.dat')
+                link_bs_dat = os.path.join(link_dir, 'data-file.xml')
+                
+                force_link(scf_bs_dat, link_bs_dat)
+                force_link(scf_bs_chrg, link_bs_chrg)
+
+            
                     
     # Run each Espresso Calculation
     def run_task(self, fw_spec):
+        FORMAT = "%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - \n\t\t%(message)s\n"
+        logging.basicConfig(filename="espresso_main.log", level=logging.DEBUG, format=FORMAT)
+        logger = logging.getLogger(__name__)
+
         # Write Input files and make Symbolic links
         self.build_inputs()
         self.write_inputs()
@@ -545,6 +563,10 @@ class QeMeanFieldTask(FireTaskBase):
         # Method for running each Espresso Task
         def run_qe_task(task):
             os.chdir(task)
+            FORMAT = "%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - \n\t\t%(message)s\n"
+            logging.basicConfig(filename="espresso_{}.log".format(task), level=logging.DEBUG, format=FORMAT)
+            logger = logging.getLogger(__name__)
+
             if task == 'scf' :
                 self.run_pw(self.pw_cmd, task)
             else:

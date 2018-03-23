@@ -182,7 +182,7 @@ qemft.build_inputs(dry_run=True)
 
 qemf_fw = Firework([qemft], name="QeMeanField")
 
-eps_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+eps_inp = binp.BgwInput(cmplx_real=cmplx_real,
             kpoints=kpts_co, qshift=qshift, filename='epsilon.inp',
             qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -193,7 +193,7 @@ eps_fw = bint.BgwFirework(eps_inp, name=namei, complex=cmplx_bool, mpi_cmd=mpi_c
 
 #eps_fw.add_fw_to_launchpad()
 
-sig_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+sig_inp = binp.BgwInput(cmplx_real=cmplx_real,
                 kpoints=kpts_co, qshift=qshift, filename='sigma.inp',
                 qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -215,7 +215,7 @@ sig_fw = bint.BgwFirework(sig_inp, name="Sigma Task", ppx=ppx, complex=cmplx_boo
 
 bgw_wf=bint.BgwWorkflow(qemf_fw, eps_fw, sig_fw, name="Sigma Converge")
 
-krn_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+krn_inp = binp.BgwInput(cmplx_real=cmplx_real,
                 qshift=qshift, filename='kernel.inp',
                 qemf_dir=prev_qemf_dir, reduce_structure=True)
 
@@ -233,7 +233,7 @@ krn_fw.add_handler('BgwMemoryHandler', run_type='kernel')
 krn_fw.add_spec('_queueadapter', {'walltime': '4:00:00', 'nnodes': 8, 'ppnode': 36,
                                   'mppwidth': 36, 'queue': 'standard'})
 
-abs_inp = binp.BgwInput(s, pseudo_dir=pseudo_dir, cmplx_real=cmplx_real,
+abs_inp = binp.BgwInput(cmplx_real=cmplx_real,
                 qshift=qshift, filename='absorption.inp',
                 qemf_dir=prev_qemf_dir, reduce_structure=True)
 

@@ -423,6 +423,8 @@ class QeMFInput(MSONable):
             task_dicts = {}
             if 'wfn' in i:
                 task_dicts['control'] = {'calculation': 'bands'}
+            elif 'scf' in i:
+                task_dicts['control'] = {'calculation': 'scf'}
             else:
                 task_dicts['control'] = {'calculation': i}
 
@@ -880,27 +882,28 @@ class QeMFPw2BgwInputs(MSONable):
 
         # Set dictionaries for input files
         for i in self.mf_tasks:
-            # Read in input files from kgrid.x for Kpoint parameters for Pw2Bgw.
-            # Reduces user interaction and guaranteed to get the parameters 
-            #   the same as was used in pw.x calculations.
-            input_file = os.path.join('ESPRESSO', i, "{}.in".format(i))
-            with open(input_file, 'r') as fin:
-                lines = fin.readlines()
+            if not "_bs" in i:
+                # Read in input files from kgrid.x for Kpoint parameters for Pw2Bgw.
+                # Reduces user interaction and guaranteed to get the parameters 
+                #   the same as was used in pw.x calculations.
+                input_file = os.path.join('ESPRESSO', i, "{}.in".format(i))
+                with open(input_file, 'r') as fin:
+                    lines = fin.readlines()
+                    
+                kpoints = [int(j) for j in lines[0].strip().split()]
+                kpoints_shift = [float(j) for j in lines[1].strip().split()]
+                qshift = [float(j) for j in lines[2].strip().split()]
+
+                # Setup parameters for input file
+                task_dict = self.pw2bgw_input.get(i)
+
+                #d = self.as_dict()
+                #with open('debug_qepw2bgw.out', 'w') as fout:
+                #    pprint.pprint(d, fout)
                 
-            kpoints = [int(j) for j in lines[0].strip().split()]
-            kpoints_shift = [float(j) for j in lines[1].strip().split()]
-            qshift = [float(j) for j in lines[2].strip().split()]
-
-            # Setup parameters for input file
-            task_dict = self.pw2bgw_input.get(i)
-
-            #d = self.as_dict()
-            #with open('debug_qepw2bgw.out', 'w') as fout:
-            #    pprint.pprint(d, fout)
-            
-            setattr(self, i, Pw2BgwInput(self.structure, pw2bgw_input=task_dict,
-                                        kpoints=kpoints, kpoints_shift=kpoints_shift,
-                                        qshift=qshift) )
+                setattr(self, i, Pw2BgwInput(self.structure, pw2bgw_input=task_dict,
+                                            kpoints=kpoints, kpoints_shift=kpoints_shift,
+                                            qshift=qshift) )
     def to_file(self):
         # Create Directory and sub directories for input files
         if not os.path.exists('./ESPRESSO'):
@@ -908,7 +911,7 @@ class QeMFPw2BgwInputs(MSONable):
         os.chdir('./ESPRESSO')
         
         for i in self.mf_tasks:
-            if not 'scf' in i.lower():
+            if not 'scf' in i.lower() and not '_bs' in i.lower():
                 # Change directory for writing PostProcessing input file.
                 # Directory should already exist from Writing kgrid.x files.
                 os.chdir(i)

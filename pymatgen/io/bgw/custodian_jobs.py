@@ -172,6 +172,10 @@ class BgwDB(FireTaskBase):
     optional_params = ['insert_to_db']
 
     def run_task(self, fw_spec):
+        FORMAT = "%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - \n\t\t%(message)s\n"
+        logging.basicConfig(filename="bgw_db.log", level=logging.DEBUG, format=FORMAT)
+        logger = logging.getLogger(__name__)
+
         self.db_config = loadfn(os.path.join(os.environ['HOME'], self.get('config_file')))
         self.upload = self.get('insert_to_db', False)
         self.database = self.db_config.get('database', 'BGW_DATA')
