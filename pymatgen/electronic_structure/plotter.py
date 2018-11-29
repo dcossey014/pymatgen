@@ -631,7 +631,8 @@ class BSPlotter(object):
                 previous_branch = this_branch
         return {'distance': tick_distance, 'label': tick_labels}
 
-    def plot_compare(self, other_plotter, legend=True):
+    def plot_compare(self, other_plotter, legend=True, ylim=None,
+            zero_to_efermi=True, smooth=False, usetex=True):
         """
         plot two band structure for comparison. One is in red the other in blue
         (no difference in spins). The two band structures need to be defined
@@ -647,7 +648,8 @@ class BSPlotter(object):
         """
         # TODO: add exception if the band structures are not compatible
         import matplotlib.lines as mlines
-        plt = self.get_plot()
+        plt = self.get_plot(ylim=ylim, zero_to_efermi=zero_to_efermi,
+                    smooth=smooth, usetex=usetex)
         data_orig = self.bs_plot_data()
         data = other_plotter.bs_plot_data()
         band_linewidth = 1
@@ -660,7 +662,7 @@ class BSPlotter(object):
                     plt.plot(data_orig['distances'][d],
                              [e[str(Spin.down)][i] for e in data['energy']][d],
                              'm--', linewidth=band_linewidth)
-        if legend:
+        if legend and other_plotter._bs.is_spin_polarized:
             handles = [mlines.Line2D([], [], linewidth=2,
                                      color='b', label='bs 1 up'),
                        mlines.Line2D([], [], linewidth=2,
@@ -671,6 +673,13 @@ class BSPlotter(object):
                        mlines.Line2D([], [], linewidth=2,
                                      color='m', linestyle="--",
                                      label='bs 2 down')]
+
+            plt.legend(handles=handles)
+        elif legend:
+            handles = [mlines.Line2D([], [], linewidth=2,
+                                    color='b', label='bs 1'),
+                       mlines.Line2D([], [], linewidth=2,
+                                    color='r', label='bs 2')]
 
             plt.legend(handles=handles)
         return plt
