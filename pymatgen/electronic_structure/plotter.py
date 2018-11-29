@@ -401,7 +401,7 @@ class BSPlotter(object):
                 if not self._bs.is_metal() else ""}
 
     def get_plot(self, zero_to_efermi=True, ylim=None, smooth=False,
-                 vbm_cbm_marker=False, smooth_tol=None):
+                 vbm_cbm_marker=False, smooth_tol=None, usetex=True):
         """
         Get a matplotlib object for the bandstructure plot.
         Blue lines are up spin, red lines are down
@@ -420,6 +420,11 @@ class BSPlotter(object):
         plt = pretty_plot(12, 8)
         from matplotlib import rc
         import scipy.interpolate as scint
+        try:
+            rc('text', usetex=usetex)
+        except:
+            # Fall back on non Tex if errored.
+            rc('text', usetex=False)
 
         # main internal config options
         e_min = -4
